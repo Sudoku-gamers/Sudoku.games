@@ -1,0 +1,260 @@
+/**
+ * Sudoku.game — Service Worker
+ * Offline-first, background sync, push notifications
+ */
+
+const APP_VERSION   = 'v1.1.0';
+const CACHE_STATIC  = `sudoku-static-v1.1.0`;
+const CACHE_RUNTIME = `sudoku-runtime-v1.1.0`;
+
+// Files to pre-cache on install (app shell)
+const PRECACHE_URLS = [
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+];
+
+// External CDN scripts — cache on first use
+const CDN_PATTERNS = [
+  'cdn.jsdelivr.net',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+];
+
+// ============================================================
+// INSTALL — pre-cache app shell
+// ============================================================
+self.addEventListener('install', event => {
+  console.log('[SW] Installing', APP_VERSION);
+  event.waitUntil(
+    caches.open(CACHE_STATIC)
+      .then(cache => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())   // Activate immediately
+  );
+});
+
+// ============================================================
+// ACTIVATE — clean up old caches
+// ============================================================
+self.addEventListener('activate', event => {
+  console.log('[SW] Activating', APP_VERSION);
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(
+        keys
+          .filter(k => k !== CACHE_STATIC && k !== CACHE_RUNTIME)
+          .map(k => {
+            console.log('[SW] Deleting old cache:', k);
+            return caches.delete(k);
+          })
+      )
+    ).then(() => self.clients.claim())  // Take control immediately
+  );
+});
+
+// ============================================================
+// FETCH — offline-first for app shell, network-first for API
+// ============================================================
+self.addEventListener('fetch', event => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Skip non-GET requests and chrome-extension
+  if (request.method !== 'GET') return;
+  if (url.protocol === 'chrome-extension:') return;
+
+  // Supabase API — network only (real-time), never cache
+  if (url.hostname.includes('supabase.co')) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // CDN scripts — cache-first with network fallback
+  if (CDN_PATTERNS.some(p => url.hostname.includes(p))) {
+    event.respondWith(
+      caches.open(CACHE_RUNTIME).then(async cache => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        try {
+          const response = await fetch(request);
+          if (response.ok) cache.put(request, response.clone());
+          return response;
+        } catch {
+          return new Response('// CDN unavailable', { headers: { 'Content-Type': 'text/javascript' } });
+        }
+      })
+    );
+    return;
+  }
+
+  // App HTML + assets — cache-first, then network, update cache in background
+  event.respondWith(
+    caches.open(CACHE_STATIC).then(async cache => {
+      const cached = await cache.match(request);
+      const networkFetch = fetch(request).then(response => {
+        if (response.ok && response.status < 400) {
+          cache.put(request, response.clone());
+        }
+        return response;
+      }).catch(() => null);
+
+      // Return cached immediately if available, but update in background
+      if (cached) {
+        event.waitUntil(networkFetch); // background update
+        return cached;
+      }
+
+      // Otherwise wait for network
+      const networkResponse = await networkFetch;
+      if (networkResponse) return networkResponse;
+
+      // Offline fallback
+      return new Response(getOfflinePage(), {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      });
+    })
+  );
+});
+
+// ============================================================
+// BACKGROUND SYNC — retry failed move pushes
+// ============================================================
+self.addEventListener('sync', event => {
+  if (event.tag === 'sync-moves') {
+    event.waitUntil(syncPendingMoves());
+  }
+});
+
+async function syncPendingMoves() {
+  // Read pending moves from IndexedDB and retry
+  try {
+    const db = await openDB();
+    const moves = await getAllPending(db);
+    for (const move of moves) {
+      try {
+        await fetch(move.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...move.headers },
+          body: JSON.stringify(move.body)
+        });
+        await deletePending(db, move.id);
+      } catch {
+        // Will retry on next sync
+      }
+    }
+  } catch (e) {
+    console.log('[SW] Background sync failed:', e);
+  }
+}
+
+// ============================================================
+// PUSH NOTIFICATIONS — opponent joined / game events
+// ============================================================
+self.addEventListener('push', event => {
+  const data = event.data ? event.data.json() : {};
+  const title = data.title || 'Sudoku.game';
+  const options = {
+    body: data.body || 'Your opponent made a move!',
+    icon: './icon-192.png',
+    badge: './icon-72.png',
+    vibrate: [100, 50, 100],
+    data: { url: data.url || './' },
+    actions: [
+      { action: 'play', title: '▶ Resume Game' },
+      { action: 'dismiss', title: 'Dismiss' },
+    ],
+    tag: 'game-event',
+    renotify: true,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  if (event.action === 'play' || !event.action) {
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+        const url = event.notification.data?.url || './';
+        if (clientList.length > 0) {
+          clientList[0].focus();
+          clientList[0].navigate(url);
+        } else {
+          clients.openWindow(url);
+        }
+      })
+    );
+  }
+});
+
+// ============================================================
+// MESSAGE — version check from main thread
+// ============================================================
+self.addEventListener('message', event => {
+  if (event.data?.type === 'GET_VERSION') {
+    event.ports[0].postMessage({ version: APP_VERSION });
+  }
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+// ============================================================
+// HELPERS
+// ============================================================
+function getOfflinePage() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sudoku.game — Offline</title>
+  <style>
+    body { background:#161512; color:#bababa; font-family:-apple-system,sans-serif;
+           display:flex; flex-direction:column; align-items:center; justify-content:center;
+           height:100vh; margin:0; text-align:center; gap:16px; padding:24px; }
+    h1 { color:#d59020; font-size:2rem; margin:0; }
+    p  { color:#777; max-width:280px; line-height:1.6; }
+    button { background:#d59020; color:#161512; border:none; padding:14px 32px;
+             border-radius:8px; font-size:1rem; font-weight:700; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div style="font-size:3rem">🧩</div>
+  <h1>You're offline</h1>
+  <p>No connection detected. Local games (vs AI, Pass & Play) work offline. Online rooms need a connection.</p>
+  <button onclick="location.reload()">Try Again</button>
+</body>
+</html>`;
+}
+
+// Minimal IndexedDB helpers for background sync queue
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('sudoku-sync', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('pending', { keyPath: 'id', autoIncrement: true });
+    req.onsuccess  = e => resolve(e.target.result);
+    req.onerror    = e => reject(e.target.error);
+  });
+}
+
+function getAllPending(db) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('pending', 'readonly');
+    const req = tx.objectStore('pending').getAll();
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+function deletePending(db, id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('pending', 'readwrite');
+    const req = tx.objectStore('pending').delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror   = e => reject(e.target.error);
+  });
+}
