@@ -3896,3 +3896,13 @@
     }
     window.addEventListener('online',  updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
+
+// Add to app.js end:
+setTimeout(() => {
+  if (!gameState.isRunning) {
+    gameState.timeLimit = 300; // Quick 5+0
+    gameState.vsAI = true;
+    gameState.aiDifficulty = 'easy';
+    startGame();
+  }
+}, 2000);
