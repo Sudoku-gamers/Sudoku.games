@@ -4710,3 +4710,357 @@
     }
     window.addEventListener('online',  updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
+    // ============================================================
+    // ANDROID NATIVE GESTURE SYSTEM
+    // ============================================================
+    (function initAndroidGestures() {
+
+        // ── 1. NAVIGATION STACK ──────────────────────────────────
+        // Maps each app "screen" to a history state so Android back
+        // button (popstate) navigates correctly instead of exiting.
+        const PAGES = ['lobby','profile','leaderboard','history','friends','tournaments','settings'];
+        const MODAL_IDS = [
+            'ai-difficulty-modal','difficulty-modal','result-modal',
+            'join-room-modal','how-to-play-modal','auth-modal',
+            'create-tournament-modal','tournament-detail-modal',
+            'dojo-modal','dojo-intro-modal','dojo-complete-modal',
+        ];
+
+        function getTopModal() {
+            return MODAL_IDS.map(id => document.getElementById(id))
+                .find(el => el && el.classList.contains('active')) || null;
+        }
+
+        function isGameActive() {
+            const gs = document.getElementById('game-screen');
+            return gs && gs.classList.contains('active');
+        }
+
+        function isSideMenuOpen() {
+            return document.getElementById('side-menu')?.classList.contains('active');
+        }
+
+        function getCurrentPage() {
+            const active = document.querySelector('.side-menu-item.active');
+            return active?.dataset?.page || 'lobby';
+        }
+
+        // Push a state so every navigation creates a history entry
+        function pushNavState(name) {
+            history.pushState({ nav: name }, '', location.href.split('?')[0]);
+        }
+
+        // Intercept all page and modal changes to push history entries
+        // Patch the page nav click handler once, post-init
+        const _origPushState = history.pushState.bind(history);
+
+        // Initial state
+        history.replaceState({ nav: 'lobby' }, '');
+
+        // Back gesture / hardware back button
+        window.addEventListener('popstate', (e) => {
+            // 1. Close any open modal first
+            const topModal = getTopModal();
+            if (topModal) {
+                topModal.classList.remove('active');
+                vibrate(30);
+                history.pushState({ nav: e.state?.nav || getCurrentPage() }, '');
+                return;
+            }
+
+            // 2. Close side menu
+            if (isSideMenuOpen()) {
+                document.getElementById('side-menu').classList.remove('active');
+                document.getElementById('side-menu-overlay')?.classList.remove('active');
+                vibrate(30);
+                history.pushState({ nav: getCurrentPage() }, '');
+                return;
+            }
+
+            // 3. Close dojo modal (dynamically inserted)
+            const dojoModal = document.getElementById('dojo-modal') ||
+                              document.getElementById('dojo-intro-modal') ||
+                              document.getElementById('dojo-complete-modal');
+            if (dojoModal) {
+                dojoModal.remove();
+                vibrate(30);
+                history.pushState({ nav: getCurrentPage() }, '');
+                return;
+            }
+
+            // 4. Exit game → back to lobby
+            if (isGameActive()) {
+                document.getElementById('back-to-lobby-btn')?.click();
+                vibrate(40);
+                history.pushState({ nav: 'lobby' }, '');
+                return;
+            }
+
+            // 5. Non-lobby page → go back to lobby
+            const page = getCurrentPage();
+            if (page && page !== 'lobby') {
+                document.querySelector('[data-page="lobby"]')?.click();
+                vibrate(30);
+                return;
+            }
+
+            // 6. Already at lobby — minimise app (re-push so we don't exit)
+            history.pushState({ nav: 'lobby' }, '');
+        });
+
+        // Push a state for every page navigation
+        document.querySelectorAll('.side-menu-item').forEach(item => {
+            item.addEventListener('click', () => {
+                pushNavState(item.dataset.page || 'lobby');
+            }, true); // capture phase — fires before the existing click handler
+        });
+
+        // Push state when modals open
+        MODAL_IDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const observer = new MutationObserver(mutations => {
+                mutations.forEach(m => {
+                    if (m.attributeName === 'class') {
+                        if (el.classList.contains('active')) {
+                            pushNavState('modal:' + id);
+                        }
+                    }
+                });
+            });
+            observer.observe(el, { attributes: true });
+        });
+
+        // ── 2. SWIPE GESTURES ────────────────────────────────────
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchStartTime = 0;
+        let isSwiping = false;
+
+        const SWIPE_THRESHOLD   = 60;   // px minimum horizontal travel
+        const SWIPE_VELOCITY    = 0.3;  // px/ms minimum speed
+        const EDGE_ZONE         = 28;   // px from screen edge to trigger edge-swipe
+        const MAX_VERTICAL_DRIFT = 80;  // px — reject if mostly vertical
+
+        document.addEventListener('touchstart', e => {
+            const t = e.touches[0];
+            touchStartX    = t.clientX;
+            touchStartY    = t.clientY;
+            touchStartTime = Date.now();
+            isSwiping      = false;
+        }, { passive: true });
+
+        document.addEventListener('touchend', e => {
+            const t = e.changedTouches[0];
+            const dx   = t.clientX - touchStartX;
+            const dy   = t.clientY - touchStartY;
+            const dt   = Date.now() - touchStartTime;
+            const vel  = Math.abs(dx) / dt;
+            const isEdge = touchStartX < EDGE_ZONE;
+
+            // Ignore if mostly vertical or too slow (scrolling)
+            if (Math.abs(dy) > MAX_VERTICAL_DRIFT) return;
+            if (Math.abs(dx) < SWIPE_THRESHOLD && !isEdge) return;
+            if (vel < SWIPE_VELOCITY && !isEdge) return;
+
+            const goingRight = dx > 0;
+            const goingLeft  = dx < 0;
+
+            // ── Swipe RIGHT (back / close) ─────────────────────
+            if (goingRight && (isEdge || Math.abs(dx) >= SWIPE_THRESHOLD)) {
+                const topModal = getTopModal();
+                if (topModal) {
+                    topModal.classList.remove('active');
+                    history.back();
+                    vibrate(30);
+                    return;
+                }
+                const dojoEl = document.getElementById('dojo-modal') ||
+                               document.getElementById('dojo-intro-modal') ||
+                               document.getElementById('dojo-complete-modal');
+                if (dojoEl) { dojoEl.remove(); history.back(); vibrate(30); return; }
+
+                if (isSideMenuOpen()) {
+                    document.getElementById('side-menu').classList.remove('active');
+                    document.getElementById('side-menu-overlay')?.classList.remove('active');
+                    vibrate(30);
+                    return;
+                }
+                if (isGameActive()) {
+                    document.getElementById('back-to-lobby-btn')?.click();
+                    vibrate(40);
+                    return;
+                }
+                const page = getCurrentPage();
+                if (page !== 'lobby') {
+                    document.querySelector('[data-page="lobby"]')?.click();
+                    vibrate(30);
+                    return;
+                }
+            }
+
+            // ── Swipe LEFT (open side menu from anywhere on lobby) ─
+            if (goingLeft && !isGameActive() && !getTopModal() && !isSideMenuOpen()) {
+                const page = getCurrentPage();
+                if (page === 'lobby' && Math.abs(dx) >= SWIPE_THRESHOLD) {
+                    document.getElementById('side-menu')?.classList.add('active');
+                    document.getElementById('side-menu-overlay')?.classList.add('active');
+                    pushNavState('menu');
+                    vibrate(30);
+                    return;
+                }
+            }
+
+            // ── Swipe DOWN to dismiss modal ──────────────────────
+            // (handled separately via Y tracking)
+        }, { passive: true });
+
+        // ── Swipe DOWN to dismiss modal ──────────────────────────
+        document.addEventListener('touchend', e => {
+            const t = e.changedTouches[0];
+            const dy = t.clientY - touchStartY;
+            const dx = t.clientX - touchStartX;
+            const dt = Date.now() - touchStartTime;
+
+            if (Math.abs(dx) > 60) return; // horizontal, skip
+            if (dy < 80) return;           // not far enough down
+
+            const topModal = getTopModal();
+            if (topModal) {
+                topModal.classList.remove('active');
+                history.back();
+                vibrate(30);
+            }
+        }, { passive: true });
+
+        // ── 3. PULL-TO-REFRESH ───────────────────────────────────
+        // Only on pages where fresh data makes sense
+        let pullStartY = 0;
+        let pullEl = null;
+
+        document.addEventListener('touchstart', e => {
+            const scrollTop = document.documentElement.scrollTop;
+            if (scrollTop > 5) return; // only at very top
+            pullStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        document.addEventListener('touchend', e => {
+            const dy = e.changedTouches[0].clientY - pullStartY;
+            if (dy < 100) return;
+            if (document.documentElement.scrollTop > 5) return;
+            if (getTopModal() || isGameActive()) return;
+
+            const page = getCurrentPage();
+            vibrate(30);
+            showToast('Refreshing…', 1000);
+
+            if (page === 'leaderboard' && typeof loadLeaderboard === 'function') loadLeaderboard();
+            if (page === 'friends'     && typeof loadFriends     === 'function') loadFriends();
+            if (page === 'tournaments' && typeof loadTournamentsPage === 'function') loadTournamentsPage();
+            if (page === 'history'     && typeof loadGameHistory  === 'function') loadGameHistory();
+            if (page === 'lobby'       && typeof loadTournaments  === 'function') loadTournaments();
+        }, { passive: true });
+
+        // ── 4. LONG-PRESS CONTEXT on game cells ─────────────────
+        // (toggles pencil mode while held)
+        let longPressTimer = null;
+        const canvas = document.getElementById('sudoku-canvas');
+        if (canvas) {
+            canvas.addEventListener('touchstart', e => {
+                longPressTimer = setTimeout(() => {
+                    // Toggle pencil/pen mode on long press
+                    const penBtn   = document.getElementById('pen-mode-btn');
+                    const pencilBtn = document.getElementById('pencil-mode-btn');
+                    if (pencilBtn) pencilBtn.click();
+                    else if (penBtn) {
+                        const inputModeBtn = document.querySelector('.input-mode-btn:not(.active)');
+                        if (inputModeBtn) inputModeBtn.click();
+                    }
+                    vibrate([30, 20, 30]); // distinct long-press haptic
+                    showToast(gameState?.inputMode === 'pencil' ? '✏ Pencil mode' : '🖊 Pen mode', 1200);
+                }, 500);
+            }, { passive: true });
+            canvas.addEventListener('touchend',   () => clearTimeout(longPressTimer), { passive: true });
+            canvas.addEventListener('touchmove',  () => clearTimeout(longPressTimer), { passive: true });
+            canvas.addEventListener('touchcancel',() => clearTimeout(longPressTimer), { passive: true });
+        }
+
+        // ── 5. KEYBOARD AWARENESS ────────────────────────────────
+        // When the virtual keyboard opens it resizes the viewport,
+        // which can push content behind the keyboard. Fix it.
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => {
+                const keyboardVisible = window.visualViewport.height < window.innerHeight * 0.75;
+                document.body.classList.toggle('keyboard-open', keyboardVisible);
+                // If keyboard opened while viewing game, scroll canvas into view
+                if (keyboardVisible && isGameActive()) {
+                    const c = document.getElementById('sudoku-canvas');
+                    if (c) c.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            });
+        }
+
+        // ── 6. PREVENT DOUBLE-TAP ZOOM ──────────────────────────
+        // Double-tap zoom breaks the game UI on Android Chrome
+        let lastTap = 0;
+        document.addEventListener('touchend', e => {
+            const now = Date.now();
+            const gap = now - lastTap;
+            if (gap < 300 && gap > 0) {
+                e.preventDefault(); // block double-tap zoom
+            }
+            lastTap = now;
+        }, { passive: false });
+
+        // ── 7. STATUS BAR & DISPLAY INSETS ──────────────────────
+        // Read safe area insets from CSS env() for notch/cutout devices
+        function applySafeAreaInsets() {
+            const style = getComputedStyle(document.documentElement);
+            const top    = style.getPropertyValue('--sat') || '0px';
+            const bottom = style.getPropertyValue('--sab') || '0px';
+            document.documentElement.style.setProperty('--safe-top',    top);
+            document.documentElement.style.setProperty('--safe-bottom', bottom);
+        }
+        applySafeAreaInsets();
+        window.addEventListener('resize', applySafeAreaInsets);
+
+        // ── 8. SHAKE TO UNDO / GET HINT ─────────────────────────
+        if (window.DeviceMotionEvent) {
+            let lastShake = 0;
+            let lastAcc = { x: 0, y: 0, z: 0 };
+            window.addEventListener('devicemotion', e => {
+                const acc = e.accelerationIncludingGravity;
+                if (!acc) return;
+                const delta = Math.abs(acc.x - lastAcc.x) +
+                              Math.abs(acc.y - lastAcc.y) +
+                              Math.abs(acc.z - lastAcc.z);
+                lastAcc = { x: acc.x, y: acc.y, z: acc.z };
+                if (delta > 40 && Date.now() - lastShake > 2000) {
+                    lastShake = Date.now();
+                    if (isGameActive() && gameState?.isRunning) {
+                        vibrate([50, 30, 50]);
+                        showToast('📳 Shake detected — use the Hint button for help!', 2500);
+                    }
+                }
+            });
+        }
+
+        // ── 9. VISIBILITY CHANGE — pause when app backgrounded ──
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (typeof gameState !== 'undefined' && gameState.isRunning && !gameState.isPaused) {
+                    gameState.isPaused = true;
+                    gameState._autoPaused = true;
+                }
+            } else {
+                if (typeof gameState !== 'undefined' && gameState._autoPaused) {
+                    gameState.isPaused = false;
+                    gameState._autoPaused = false;
+                    gameState.lastTick = Date.now(); // prevent time jump on resume
+                    showToast('▶ Game resumed', 1200);
+                    vibrate(30);
+                }
+            }
+        });
+
+    })();

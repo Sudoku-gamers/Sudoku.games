@@ -2295,3 +2295,112 @@
     white-space: nowrap;
     flex-shrink: 0;
 }
+
+/* ============================================================
+   ANDROID GESTURE SYSTEM — supporting CSS
+   ============================================================ */
+
+/* Safe area insets for notch/cutout devices */
+:root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Shift game controls up when keyboard opens */
+body.keyboard-open #number-pad,
+body.keyboard-open .game-controls {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: var(--bg-secondary);
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 16px rgba(0,0,0,0.4);
+}
+
+body.keyboard-open #sudoku-canvas {
+    max-height: 42vh;
+}
+
+/* Smooth modal transitions (swipe-down feel) */
+.modal-overlay.active .modal {
+    animation: slideUp 0.22s cubic-bezier(0.34, 1.15, 0.64, 1) both;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(32px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Swipe hint edge indicator (visible on first launch) */
+.swipe-hint-edge {
+    position: fixed;
+    left: 0;
+    top: 40%;
+    width: 4px;
+    height: 48px;
+    background: rgba(213, 144, 32, 0.35);
+    border-radius: 0 4px 4px 0;
+    z-index: 9000;
+    pointer-events: none;
+    animation: swipeHintPulse 2.5s ease-in-out 3;
+}
+
+@keyframes swipeHintPulse {
+    0%, 100% { opacity: 0; transform: scaleY(0.6); }
+    50%       { opacity: 1; transform: scaleY(1); }
+}
+
+/* Pull-to-refresh visual cue */
+.pull-indicator {
+    position: fixed;
+    top: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent-orange);
+    color: var(--bg-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 0 0 12px 12px;
+    z-index: 9001;
+    transition: top 0.2s;
+    pointer-events: none;
+}
+
+/* Active press feedback on touch devices */
+@media (hover: none) {
+    .action-btn:active,
+    .list-item:active,
+    .side-menu-item:active {
+        transform: scale(0.97);
+        opacity: 0.85;
+        transition: transform 0.08s, opacity 0.08s;
+    }
+
+    /* Remove hover states on touch devices */
+    button:hover:not(:active) {
+        background: unset;
+    }
+}
+
+/* Larger touch targets for small buttons */
+@media (pointer: coarse) {
+    .num-pad-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .action-btn {
+        min-height: 48px;
+    }
+
+    .side-menu-item {
+        min-height: 52px;
+    }
+}
