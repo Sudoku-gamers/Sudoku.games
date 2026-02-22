@@ -1154,9 +1154,10 @@
                 }
             }
             
-            gameState.timeRemaining = gameState.timeLimit;
-            gameState.p1Time = gameState.timeLimit;
-            gameState.p2Time = gameState.timeLimit;
+            gameState.timeRemaining = gameState.timeLimit || 600;
+            gameState.p1Time = gameState.timeLimit || 600;
+            gameState.p2Time = gameState.timeLimit || 600;
+            gameState.dojoElapsed = 0; // reset elapsed timer for dojo
             gameState.scores = { p1: 0, p2: 0 };
             gameState.currentPlayer = 1;
             gameState.isRunning = true;
@@ -1187,6 +1188,21 @@
                 document.getElementById('ai-indicator').classList.remove('active');
                 document.getElementById('opponent-name').textContent = 'Opponent';
                 document.getElementById('opponent-rating').textContent = 'Rating: 3.2';
+            }
+
+            // Solo/dojo mode — hide opponent panel entirely
+            const p2Row = document.querySelector('.player-row.p2-row') || document.querySelector('[class*="p2"]')?.closest('.player-row');
+            const opponentPanel = document.getElementById('p2-panel') || document.querySelector('.opponent-panel');
+            if (gameState.gameMode === 'solo') {
+                // Hide opponent display elements
+                document.querySelector('.player-row:first-child')?.style && 
+                    (document.querySelectorAll('.player-row')[0].style.display = 'none');
+                document.getElementById('turn-indicator') && 
+                    (document.getElementById('turn-indicator').style.display = 'none');
+            } else {
+                document.querySelectorAll('.player-row').forEach(r => r.style.display = '');
+                const ti = document.getElementById('turn-indicator');
+                if (ti) ti.style.display = '';
             }
             
             lobby.style.display = 'none';
@@ -1448,7 +1464,11 @@
             gameState.lastTick = now;
             
             if (!gameState.isPaused) {
-                if (gameState.gameMode === 'simultaneous') {
+                if (gameState.gameMode === 'solo') {
+                    // Solo/puzzle mode — untimed, just track elapsed for display
+                    gameState.dojoElapsed = (gameState.dojoElapsed || 0) + delta;
+                    // No timeout for solo mode
+                } else if (gameState.gameMode === 'simultaneous') {
                     gameState.timeRemaining -= delta;
                     gameState.p1Time = gameState.timeRemaining;
                     gameState.p2Time = gameState.timeRemaining;
@@ -1464,7 +1484,7 @@
                     gameState.p1Time = gameState.timeRemaining;
                 }
                 
-                if (gameState.timeRemaining <= 0) {
+                if (gameState.gameMode !== 'solo' && gameState.timeRemaining <= 0) {
                     gameState.timeRemaining = 0;
                     endGameByTimeout();
                     return;
@@ -1479,19 +1499,26 @@
 
         function updateTimerDisplay() {
             const formatTime = (seconds) => {
-                const mins = Math.floor(seconds / 60);
-                const secs = Math.floor(seconds % 60);
+                const mins = Math.floor(Math.abs(seconds) / 60);
+                const secs = Math.floor(Math.abs(seconds) % 60);
                 return `${mins}:${secs.toString().padStart(2, '0')}`;
             };
-            
-            document.getElementById('p1-timer').textContent = formatTime(gameState.p1Time);
-            document.getElementById('p2-timer').textContent = formatTime(gameState.p2Time);
-            
-            // Low time warning
-            [document.getElementById('p1-timer'), document.getElementById('p2-timer')].forEach(el => {
-                const time = el.id === 'p1-timer' ? gameState.p1Time : gameState.p2Time;
-                el.classList.toggle('low', time < 30);
-            });
+
+            if (gameState.gameMode === 'solo') {
+                // Show elapsed time counting up
+                const elapsed = gameState.dojoElapsed || 0;
+                document.getElementById('p1-timer').textContent = formatTime(elapsed);
+                document.getElementById('p2-timer').textContent = '';
+            } else {
+                document.getElementById('p1-timer').textContent = formatTime(gameState.p1Time);
+                document.getElementById('p2-timer').textContent = formatTime(gameState.p2Time);
+                
+                // Low time warning
+                [document.getElementById('p1-timer'), document.getElementById('p2-timer')].forEach(el => {
+                    const time = el.id === 'p1-timer' ? gameState.p1Time : gameState.p2Time;
+                    el.classList.toggle('low', time < 30);
+                });
+            }
         }
 
         function updateScores() {
@@ -3228,7 +3255,7 @@
             gameState.gameMode = 'solo';
             gameState.difficulty = technique.difficulty;
             gameState.vsAI = false;
-            gameState.timeLimit = 0; // untimed — puzzle mode
+            gameState.timeLimit = 9999; // effectively untimed — timer counts up instead
 
             // Start the game
             startGame();
