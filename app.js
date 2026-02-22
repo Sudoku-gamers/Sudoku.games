@@ -3326,6 +3326,8 @@
                     .select('*')
                     .neq('player_id', myId)
                     .eq('time_limit', gameState.timeLimit)
+                    .eq('game_mode', gameState.gameMode)
+                    .neq('game_mode', 'signal')
                     .gte('rating', myRating - ratingRange)
                     .lte('rating', myRating + ratingRange)
                     .order('joined_at', { ascending: true })
