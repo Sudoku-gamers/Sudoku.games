@@ -3,19 +3,19 @@
  * Offline-first, background sync, push notifications
  */
 
-const APP_VERSION   = 'v1.7.0';
-const CACHE_STATIC  = `sudoku-static-v1.7.0`;
-const CACHE_RUNTIME = `sudoku-runtime-v1.7.0`;
+const APP_VERSION   = 'v1.8.0';
+const CACHE_STATIC  = `sudoku-static-v1.8.0`;
+const CACHE_RUNTIME = `sudoku-runtime-v1.8.0`;
 
 // Files to pre-cache on install (app shell)
 const PRECACHE_URLS = [
-  '/Sudoku.games/',
-  '/Sudoku.games/index.html',
-  '/Sudoku.games/style.css',
-  '/Sudoku.games/app.js',
-  '/Sudoku.games/manifest.json',
-  '/Sudoku.games/icon-192.png',
-  '/Sudoku.games/icon-512.png',
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
 ];
 
 // External CDN scripts — cache on first use
