@@ -1154,10 +1154,10 @@
                 }
             }
             
-            gameState.timeRemaining = gameState.timeLimit || 600;
-            gameState.p1Time = gameState.timeLimit || 600;
-            gameState.p2Time = gameState.timeLimit || 600;
-            gameState.dojoElapsed = 0; // reset elapsed timer for dojo
+            gameState.timeRemaining = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
+            gameState.p1Time = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
+            gameState.p2Time = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
+            gameState.dojoElapsed = 0;
             gameState.scores = { p1: 0, p2: 0 };
             gameState.currentPlayer = 1;
             gameState.isRunning = true;
@@ -2097,22 +2097,31 @@
         }
 
         function checkGameEnd() {
+            // Solo/puzzle mode: board full = puzzle complete
+            if (gameState.gameMode === 'solo') {
+                let isFull = true;
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (gameState.claims[r][c] === 0) { isFull = false; break; }
+                    }
+                    if (!isFull) break;
+                }
+                if (isFull) endGame(1, 'solved');
+                return;
+            }
+            // Competitive: board full = count cells
             let isFull = true;
             for (let r = 0; r < 9; r++) {
                 for (let c = 0; c < 9; c++) {
-                    if (gameState.claims[r][c] === 0) {
-                        isFull = false;
-                        break;
-                    }
+                    if (gameState.claims[r][c] === 0) { isFull = false; break; }
                 }
+                if (!isFull) break;
             }
-            
-            if (isFull) {
-                endGameByCells();
-            }
+            if (isFull) endGameByCells();
         }
 
         function endGameByTimeout() {
+            if (gameState.gameMode === 'solo') return; // solo is untimed
             if (gameState.gameMode === 'passplay') {
                 endGame(gameState.p1Time <= 0 ? 2 : 1, 'timeout');
             } else {
@@ -2200,12 +2209,18 @@
             }
             
             if (gameState.gameMode === 'solo') {
-                icon.textContent = gameState.scores.p1 > 0 ? '🎉' : '🤔';
-                title.textContent = gameState.scores.p1 > 0 ? 'Puzzle Complete!' : 'Keep Trying!';
-                subtitle.textContent = `You solved ${gameState.scores.p1} cells`;
+                const solved = reason === 'solved'; // full board completed
+                const elapsed = Math.round(gameState.dojoElapsed || 0);
+                const mins = Math.floor(elapsed / 60), secs = elapsed % 60;
+                const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+                icon.textContent = solved ? '🎉' : '🤔';
+                title.textContent = solved ? 'Puzzle Complete!' : 'Keep Trying!';
+                subtitle.textContent = solved
+                    ? `Solved in ${timeStr} · ${gameState.scores.p1} cells`
+                    : `You placed ${gameState.scores.p1} cells so far`;
                 ratingChangeEl.parentElement.style.display = 'none';
-                // Award dojo XP if this was a technique puzzle
-                if (gameState.dojoTechniqueId && gameState.scores.p1 > 0) {
+                // Award dojo XP on full solve
+                if (gameState.dojoTechniqueId && solved) {
                     completeDojoPuzzle();
                 }
             } else if (winner === 1) {
@@ -4693,7 +4708,7 @@
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', async () => {
             try {
-                swRegistration = await navigator.serviceWorker.register('./sw2.js');
+                swRegistration = await navigator.serviceWorker.register('./sw.js');
                 console.log('[PWA] SW registered ✓ scope:', swRegistration.scope);
                 console.log('[PWA] SW state:', swRegistration.active?.state || 'installing');
 
