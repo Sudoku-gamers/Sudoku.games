@@ -184,38 +184,50 @@
         }
 
         function updateAllDisplays() {
+            // Prefer cloud profile when signed in, fall back to local data
+            const profile = currentProfile || playerData.profile;
+            const username = currentProfile?.username || playerData.settings.username || 'Player';
+            const rating = currentProfile?.rating ?? playerRating;
+            const gamesPlayed = currentProfile?.games_played ?? playerData.profile.gamesPlayed;
+            const wins = currentProfile?.wins ?? playerData.profile.wins;
+            const losses = currentProfile?.losses ?? playerData.profile.losses;
+            const draws = currentProfile?.draws ?? playerData.profile.draws;
+            const bestStreak = currentProfile?.best_streak ?? playerData.profile.bestStreak;
+            const avatar = currentProfile?.avatar_emoji || username.charAt(0).toUpperCase();
+
             // Update rating displays
-            document.getElementById('user-rating').textContent = playerRating.toFixed(1);
-            document.getElementById('p1-rating-display').textContent = 'Rating: ' + playerRating.toFixed(1);
-            document.getElementById('menu-rating').textContent = 'Rating: ' + playerRating.toFixed(1);
-            
+            const ratingStr = rating.toFixed(1);
+            document.getElementById('user-rating').textContent = ratingStr;
+            document.getElementById('p1-rating-display').textContent = 'Rating: ' + ratingStr;
+            document.getElementById('menu-rating').textContent = 'Rating: ' + ratingStr;
+
             // Update username displays
-            const username = playerData.settings.username;
             document.getElementById('menu-username').textContent = username;
-            document.getElementById('menu-avatar').textContent = username.charAt(0).toUpperCase();
+            document.getElementById('menu-avatar').textContent = avatar;
             document.getElementById('profile-username').textContent = username;
-            document.getElementById('username-input').value = username;
-            
+            const usernameInput = document.getElementById('username-input');
+            if (usernameInput && document.activeElement !== usernameInput) {
+                usernameInput.value = username;
+            }
+
             // Update profile stats
-            document.getElementById('profile-rating').textContent = playerRating.toFixed(1);
-            document.getElementById('profile-games').textContent = playerData.profile.gamesPlayed;
-            document.getElementById('profile-wins').textContent = playerData.profile.wins;
-            document.getElementById('profile-losses').textContent = playerData.profile.losses;
-            document.getElementById('profile-draws').textContent = playerData.profile.draws;
-            document.getElementById('profile-streak').textContent = playerData.profile.bestStreak;
-            
+            document.getElementById('profile-rating').textContent = ratingStr;
+            document.getElementById('profile-games').textContent = gamesPlayed;
+            document.getElementById('profile-wins').textContent = wins;
+            document.getElementById('profile-losses').textContent = losses;
+            document.getElementById('profile-draws').textContent = draws;
+            document.getElementById('profile-streak').textContent = bestStreak;
+
             // Update badges
             updateBadges();
-            
+
             // Update settings toggles
             updateToggle('sound-toggle', playerData.settings.soundEnabled);
             updateToggle('animations-toggle', playerData.settings.animationsEnabled);
-            
+
             // Update theme select
             const themeSelect = document.getElementById('theme-select');
-            if (themeSelect) {
-                themeSelect.value = playerData.settings.boardTheme || 'classic';
-            }
+            if (themeSelect) themeSelect.value = playerData.settings.boardTheme || 'classic';
         }
 
         function updateToggle(id, active) {
@@ -230,23 +242,18 @@
         }
 
         function updateBadges() {
-            // First Win
-            setBadge('badge-first-win', playerData.profile.wins >= 1);
-            // 5 Win Streak
-            setBadge('badge-winning-streak', playerData.profile.bestStreak >= 5);
-            // Master (4.0+ rating)
-            setBadge('badge-master', playerRating >= 4.0);
-            // Veteran (100 games)
-            setBadge('badge-veteran', playerData.profile.gamesPlayed >= 100);
-            // Speedster (bullet win)
-            const hasBulletWin = playerData.history.some(g => 
-                g.result === 'win' && g.timeControl <= 120
-            );
+            const wins = currentProfile?.wins ?? playerData.profile.wins;
+            const bestStreak = currentProfile?.best_streak ?? playerData.profile.bestStreak;
+            const gamesPlayed = currentProfile?.games_played ?? playerData.profile.gamesPlayed;
+            const rating = currentProfile?.rating ?? playerRating;
+
+            setBadge('badge-first-win', wins >= 1);
+            setBadge('badge-winning-streak', bestStreak >= 5);
+            setBadge('badge-master', rating >= 4.0);
+            setBadge('badge-veteran', gamesPlayed >= 100);
+            const hasBulletWin = playerData.history.some(g => g.result === 'win' && g.timeControl <= 120);
             setBadge('badge-speedster', hasBulletWin);
-            // Expert (hard win)
-            const hasHardWin = playerData.history.some(g => 
-                g.result === 'win' && g.difficulty === 'hard'
-            );
+            const hasHardWin = playerData.history.some(g => g.result === 'win' && g.difficulty === 'hard');
             setBadge('badge-expert', hasHardWin);
         }
 
@@ -264,36 +271,32 @@
         }
 
         function recordGame(result, opponentName) {
+            const ratingBefore = currentProfile?.rating ?? playerData.profile.rating;
             const gameRecord = {
                 id: Date.now(),
                 date: new Date().toISOString().split('T')[0],
                 time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
                 difficulty: gameState.difficulty,
                 timeControl: gameState.timeLimit,
-                result: result, // 'win', 'loss', 'draw'
+                result: result,
                 p1Score: gameState.scores.p1,
                 p2Score: gameState.scores.p2,
-                opponent: opponentName || (gameState.vsAI ? 
+                opponent: opponentName || (gameState.vsAI ?
                     CONFIG.AI_DIFFICULTY[gameState.aiDifficulty].name : 'Opponent'),
                 timeRemaining: gameState.p1Time,
-                ratingChange: playerRating - playerData.profile.rating
+                ratingChange: playerRating - ratingBefore
             };
-            
+
             playerData.history.unshift(gameRecord);
-            
-            // Keep only last 100 games
-            if (playerData.history.length > 100) {
-                playerData.history = playerData.history.slice(0, 100);
-            }
-            
-            // Update profile stats
+            if (playerData.history.length > 100) playerData.history = playerData.history.slice(0, 100);
+
+            // Update local stats (cloud stats updated separately via saveGameToCloud)
             playerData.profile.gamesPlayed++;
             if (result === 'win') {
                 playerData.profile.wins++;
                 playerData.profile.currentStreak++;
-                if (playerData.profile.currentStreak > playerData.profile.bestStreak) {
+                if (playerData.profile.currentStreak > playerData.profile.bestStreak)
                     playerData.profile.bestStreak = playerData.profile.currentStreak;
-                }
             } else if (result === 'loss') {
                 playerData.profile.losses++;
                 playerData.profile.currentStreak = 0;
@@ -302,9 +305,7 @@
                 playerData.profile.currentStreak = 0;
             }
 
-            // Daily streak
             recordDailyGame();
-            
             savePlayerData();
             renderHistory();
         }
@@ -372,144 +373,25 @@
             }).join('');
         }
 
-        function generateLeaderboard() {
-            // Generate mock leaderboard data
-            const players = [
-                { name: 'GrandMaster', rating: 5.2, games: 523, wins: 412 },
-                { name: 'SudokuKing', rating: 4.8, games: 892, wins: 634 },
-                { name: 'PuzzleQueen', rating: 4.5, games: 445, wins: 312 },
-                { name: 'LogicLord', rating: 4.3, games: 678, wins: 453 },
-                { name: 'NumberNinja', rating: 4.1, games: 334, wins: 221 },
-                { name: 'GridGuru', rating: 3.9, games: 567, wins: 378 },
-                { name: 'CellMaster', rating: 3.7, games: 289, wins: 183 },
-                { name: 'DigitDuke', rating: 3.5, games: 412, wins: 256 },
-                { name: 'RowRuler', rating: 3.3, games: 234, wins: 142 },
-                { name: 'BoxBoss', rating: 3.1, games: 198, wins: 115 }
-            ];
-            
-            // Add current player to leaderboard
-            const currentPlayer = {
-                name: playerData.settings.username,
-                rating: playerRating,
-                games: playerData.profile.gamesPlayed,
-                wins: playerData.profile.wins,
-                isCurrentUser: true
-            };
-            
-            // Insert current player and sort
-            players.push(currentPlayer);
-            players.sort((a, b) => b.rating - a.rating);
-            
-            return players;
-        }
 
         function renderLeaderboard() {
-            const leaderboard = generateLeaderboard();
+            // No Supabase connection — show prompt to connect
             const leaderboardList = document.getElementById('leaderboard-list');
-            
-            leaderboardList.innerHTML = leaderboard.map((player, index) => {
-                const rank = index + 1;
-                const winRate = player.games > 0 ? 
-                    ((player.wins / player.games) * 100).toFixed(0) : 0;
-                const rankClass = rank <= 3 ? `rank-${rank}` : '';
-                const currentUserClass = player.isCurrentUser ? 'current-user' : '';
-                
-                return `
-                    <div class="leaderboard-item ${rankClass} ${currentUserClass}">
-                        <div class="leaderboard-rank">#${rank}</div>
-                        <div class="leaderboard-avatar">${player.name.charAt(0).toUpperCase()}</div>
-                        <div class="leaderboard-info">
-                            <div class="leaderboard-name">${player.name}</div>
-                            <div class="leaderboard-stats">${player.games} games • ${winRate}% win rate</div>
-                        </div>
-                        <div class="leaderboard-rating">${player.rating.toFixed(1)}</div>
-                    </div>
-                `;
-            }).join('');
+            if (leaderboardList) {
+                leaderboardList.innerHTML = '<div class="empty-state" style="color:#555;">Sign in to see the global leaderboard</div>';
+            }
         }
+
 
         // ============================================
         // PUZZLES
         // ============================================
-        const PUZZLES = {
-            easy: {
-                puzzle: [
-                    [5, 3, 4, 0, 7, 0, 0, 0, 0],
-                    [6, 7, 2, 1, 9, 5, 0, 0, 0],
-                    [1, 9, 8, 3, 4, 2, 0, 6, 7],
-                    [8, 5, 9, 7, 6, 1, 4, 2, 3],
-                    [4, 2, 6, 8, 0, 3, 7, 9, 1],
-                    [7, 1, 3, 9, 2, 4, 8, 5, 6],
-                    [9, 6, 1, 5, 3, 7, 2, 8, 4],
-                    [2, 8, 7, 4, 1, 9, 6, 3, 5],
-                    [3, 4, 5, 2, 8, 6, 1, 7, 9]
-                ],
-                solution: [
-                    [5, 3, 4, 6, 7, 8, 9, 1, 2],
-                    [6, 7, 2, 1, 9, 5, 3, 4, 8],
-                    [1, 9, 8, 3, 4, 2, 5, 6, 7],
-                    [8, 5, 9, 7, 6, 1, 4, 2, 3],
-                    [4, 2, 6, 8, 5, 3, 7, 9, 1],
-                    [7, 1, 3, 9, 2, 4, 8, 5, 6],
-                    [9, 6, 1, 5, 3, 7, 2, 8, 4],
-                    [2, 8, 7, 4, 1, 9, 6, 3, 5],
-                    [3, 4, 5, 2, 8, 6, 1, 7, 9]
-                ]
-            },
-            medium: {
-                puzzle: [
-                    [5, 3, 0, 0, 7, 0, 0, 0, 0],
-                    [6, 0, 0, 1, 9, 5, 0, 0, 0],
-                    [0, 9, 8, 0, 0, 0, 0, 6, 0],
-                    [8, 0, 0, 0, 6, 0, 0, 0, 3],
-                    [4, 0, 0, 8, 0, 3, 0, 0, 1],
-                    [7, 0, 0, 0, 2, 0, 0, 0, 6],
-                    [0, 6, 0, 0, 0, 0, 2, 8, 0],
-                    [0, 0, 0, 4, 1, 9, 0, 0, 5],
-                    [0, 0, 0, 0, 8, 0, 0, 7, 9]
-                ],
-                solution: [
-                    [5, 3, 4, 6, 7, 8, 9, 1, 2],
-                    [6, 7, 2, 1, 9, 5, 3, 4, 8],
-                    [1, 9, 8, 3, 4, 2, 5, 6, 7],
-                    [8, 5, 9, 7, 6, 1, 4, 2, 3],
-                    [4, 2, 6, 8, 5, 3, 7, 9, 1],
-                    [7, 1, 3, 9, 2, 4, 8, 5, 6],
-                    [9, 6, 1, 5, 3, 7, 2, 8, 4],
-                    [2, 8, 7, 4, 1, 9, 6, 3, 5],
-                    [3, 4, 5, 2, 8, 6, 1, 7, 9]
-                ]
-            },
-            hard: {
-                puzzle: [
-                    [5, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 9, 5, 0, 0, 0],
-                    [0, 9, 0, 0, 0, 0, 0, 6, 0],
-                    [8, 0, 0, 0, 6, 0, 0, 0, 0],
-                    [4, 0, 0, 8, 0, 0, 0, 0, 1],
-                    [0, 0, 0, 0, 2, 0, 0, 0, 6],
-                    [0, 6, 0, 0, 0, 0, 2, 0, 0],
-                    [0, 0, 0, 4, 1, 9, 0, 0, 0],
-                    [0, 0, 0, 0, 8, 0, 0, 7, 0]
-                ],
-                solution: [
-                    [5, 3, 4, 6, 7, 8, 9, 1, 2],
-                    [6, 7, 2, 1, 9, 5, 3, 4, 8],
-                    [1, 9, 8, 3, 4, 2, 5, 6, 7],
-                    [8, 5, 9, 7, 6, 1, 4, 2, 3],
-                    [4, 2, 6, 8, 5, 3, 7, 9, 1],
-                    [7, 1, 3, 9, 2, 4, 8, 5, 6],
-                    [9, 6, 1, 5, 3, 7, 2, 8, 4],
-                    [2, 8, 7, 4, 1, 9, 6, 3, 5],
-                    [3, 4, 5, 2, 8, 6, 1, 7, 9]
-                ]
-            }
-        };
 
         // ============================================
         // SUDOKU GENERATOR
         // ============================================
         function generateSudoku(difficulty, timeLimit) {
+
             // Start with a complete valid solution
             const solution = generateCompleteSolution();
             
@@ -1198,7 +1080,7 @@
             } else {
                 document.getElementById('ai-indicator').classList.remove('active');
                 document.getElementById('opponent-name').textContent = 'Opponent';
-                document.getElementById('opponent-rating').textContent = 'Rating: 3.2';
+                document.getElementById('opponent-rating').textContent = '';
             }
 
             // Solo/dojo mode — hide opponent panel entirely
@@ -1348,7 +1230,7 @@
             } else {
                 document.getElementById('ai-indicator').classList.remove('active');
                 document.getElementById('opponent-name').textContent = s.onlineRoomId ? 'Online Opponent' : 'Opponent';
-                document.getElementById('opponent-rating').textContent = s.onlineRoomId ? 'Online' : 'Rating: 3.2';
+                document.getElementById('opponent-rating').textContent = s.onlineRoomId ? 'Online' : '';
             }
 
             hideOngoingIcon();
@@ -4063,22 +3945,7 @@
         }
 
         function updateUIWithProfile() {
-            if (!currentProfile) return;
-            // Profile page
-            const pu = document.getElementById('profile-username');
-            const pr = document.getElementById('profile-rating');
-            const pg = document.getElementById('profile-games');
-            const pw = document.getElementById('profile-wins');
-            const pl = document.getElementById('profile-losses');
-            const pd = document.getElementById('profile-draws');
-            const ps = document.getElementById('profile-streak');
-            if (pu) pu.textContent = currentProfile.username;
-            if (pr) pr.textContent = currentProfile.rating.toFixed(1);
-            if (pg) pg.textContent = currentProfile.games_played;
-            if (pw) pw.textContent = currentProfile.wins;
-            if (pl) pl.textContent = currentProfile.losses;
-            if (pd) pd.textContent = currentProfile.draws;
-            if (ps) ps.textContent = currentProfile.best_streak;
+            updateAllDisplays(); // updateAllDisplays now reads currentProfile directly
         }
 
         function openAuthModal() {
