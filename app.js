@@ -2570,16 +2570,16 @@
                 document.getElementById('side-menu-overlay').classList.add('active');
             });
 
-            // Show create button only when signed in
-            function refreshCreateBtn() {
-                const btn = document.getElementById('create-tournament-btn');
-                if (btn) btn.style.display = currentUser ? 'block' : 'none';
-            }
-            refreshCreateBtn();
-            document.addEventListener('authStateChanged', refreshCreateBtn);
+            // Show create button always — prompt sign-in if needed on click
+            // (button is always visible, no need to hide/show)
 
-            // Create button opens modal
+            // Create button opens modal (or prompts sign-in)
             document.getElementById('create-tournament-btn').addEventListener('click', () => {
+                if (!currentUser) {
+                    showToast('Sign in to create a tournament', 2500);
+                    setTimeout(() => document.getElementById('side-auth-btn')?.click(), 600);
+                    return;
+                }
                 document.getElementById('create-tournament-error').textContent = '';
                 document.getElementById('t-name').value = '';
                 document.getElementById('create-tournament-modal').classList.add('active');
