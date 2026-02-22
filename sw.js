@@ -3,9 +3,9 @@
  * Offline-first, background sync, push notifications
  */
 
-const APP_VERSION   = 'v1.8.0';
-const CACHE_STATIC  = `sudoku-static-v1.8.0`;
-const CACHE_RUNTIME = `sudoku-runtime-v1.8.0`;
+const APP_VERSION   = 'v1.9.0';
+const CACHE_STATIC  = `sudoku-static-v1.9.0`;
+const CACHE_RUNTIME = `sudoku-runtime-v1.9.0`;
 
 // Files to pre-cache on install (app shell)
 const PRECACHE_URLS = [
@@ -215,11 +215,15 @@ self.addEventListener('notificationclick', event => {
 });
 
 // ============================================================
-// MESSAGE — version check from main thread
+// MESSAGE — from main thread
 // ============================================================
 self.addEventListener('message', event => {
   if (event.data?.type === 'GET_VERSION') {
     event.ports[0].postMessage({ version: APP_VERSION });
+  }
+
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 
   if (event.data?.type === 'SHOW_NOTIFICATION') {
@@ -233,10 +237,6 @@ self.addEventListener('message', event => {
         renotify: true,
       })
     );
-  }
-});
-  if (event.data?.type === 'SKIP_WAITING') {
-    self.skipWaiting();
   }
 });
 
