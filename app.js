@@ -3785,7 +3785,7 @@
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', async () => {
             try {
-                swRegistration = await navigator.serviceWorker.register('./sw.js');
+                swRegistration = await navigator.serviceWorker.register('./sw2.js');
                 console.log('[PWA] SW registered ✓ scope:', swRegistration.scope);
                 console.log('[PWA] SW state:', swRegistration.active?.state || 'installing');
 
