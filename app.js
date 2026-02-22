@@ -2502,14 +2502,16 @@
         // ============================================================
         // TOURNAMENTS — fetch from Supabase and render live
         // ============================================================
+        // ============================================================
+        // TOURNAMENTS — lobby widget
+        // ============================================================
         async function loadTournaments() {
             if (!supabaseClient) return;
-
             const now = new Date().toISOString();
             const { data, error } = await supabaseClient
                 .from('tournaments')
                 .select('*')
-                .gte('ends_at', now)
+                .in('status', ['waiting', 'active'])
                 .order('starts_at', { ascending: true })
                 .limit(5);
 
@@ -2521,95 +2523,97 @@
                 return;
             }
 
-            const icons = { fire: '🔥', bolt: '⚡', trophy: '🏆', star: '⭐', crown: '👑' };
-
             container.innerHTML = data.map(t => {
-                const endsAt = new Date(t.ends_at);
-                const diffMs = endsAt - Date.now();
-                const diffH  = Math.floor(diffMs / 3600000);
-                const diffM  = Math.floor((diffMs % 3600000) / 60000);
-                const timeLeft = diffH > 0 ? diffH + 'H' : diffM + 'M';
-                const icon = icons[t.icon] || '🏆';
-                const players = t.player_count >= 1000
-                    ? (t.player_count / 1000).toFixed(1) + 'k'
-                    : t.player_count;
-
+                const icon = ICONS[t.icon] || '🏆';
+                const statusLabel = t.status === 'active' ? '🟢 Live' : '⏳ Waiting';
                 return `
                     <div class="list-item" style="cursor:pointer;" onclick="openTournamentDetail('${t.id}')">
-                        <div class="list-icon ${t.icon || 'trophy'}" style="font-size:1.4rem;">${icon}</div>
+                        <div style="font-size:1.4rem;width:36px;text-align:center;">${icon}</div>
                         <div class="list-content">
                             <div class="list-title">${t.name}</div>
-                            <div class="list-meta">${t.time_control} Rated • ${timeLeft}</div>
+                            <div class="list-meta">${t.time_control} • ${statusLabel}</div>
                         </div>
                         <div class="list-right">
-                            <div class="list-players">👤 ${players}</div>
+                            <div class="list-players">👤 ${t.player_count}</div>
                         </div>
                     </div>`;
             }).join('');
 
-            // Realtime updates
-            supabaseClient
-                .channel('lobby-tournaments-live')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, () => {
-                    loadTournaments();
-                })
+            supabaseClient.channel('lobby-tournaments-live')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, loadTournaments)
                 .subscribe();
         }
 
-        
         // ============================================================
-        // TOURNAMENTS PAGE
+        // TOURNAMENTS PAGE — full system
         // ============================================================
+        const ICONS = { fire: '🔥', bolt: '⚡', trophy: '🏆', star: '⭐', crown: '👑' };
         let _currentTournamentId = null;
+        let _tournamentDetailInterval = null;
+
+        // Exposed globally for inline onclick in HTML
+        window.toggleScheduled = function() {
+            const mode = document.getElementById('t-start-mode').value;
+            const row  = document.getElementById('t-schedule-row');
+            row.style.display = mode === 'scheduled' ? 'flex' : 'none';
+            if (mode === 'scheduled') {
+                // Default to 1 hour from now
+                const dt = new Date(Date.now() + 3600000);
+                dt.setSeconds(0, 0);
+                document.getElementById('t-scheduled-at').value =
+                    dt.toISOString().slice(0, 16);
+            }
+        };
+
+        window.copyTournamentLink = function() {
+            const link = document.getElementById('td-link').textContent;
+            navigator.clipboard.writeText(link).then(() => showToast('Link copied!', 1500));
+        };
 
         function initTournamentsPage() {
-            // Menu btn
             const menuBtn = document.getElementById('tournaments-menu-btn');
             if (menuBtn) menuBtn.addEventListener('click', () => {
                 document.getElementById('side-menu').classList.add('active');
                 document.getElementById('side-menu-overlay').classList.add('active');
             });
 
-            // Show create button always — prompt sign-in if needed on click
-            // (button is always visible, no need to hide/show)
-
-            // Create button opens modal (or prompts sign-in)
             document.getElementById('create-tournament-btn').addEventListener('click', () => {
                 if (!currentUser) {
                     showToast('Sign in to create a tournament', 2500);
                     setTimeout(() => document.getElementById('side-auth-btn')?.click(), 600);
                     return;
                 }
-                document.getElementById('create-tournament-error').textContent = '';
+                // Reset form
                 document.getElementById('t-name').value = '';
+                document.getElementById('t-start-mode').value = 'now';
+                document.getElementById('t-schedule-row').style.display = 'none';
+                document.getElementById('create-tournament-error').textContent = '';
                 document.getElementById('create-tournament-modal').classList.add('active');
             });
 
-            // Cancel
-            document.getElementById('create-tournament-cancel').addEventListener('click', () => {
-                document.getElementById('create-tournament-modal').classList.remove('active');
-            });
+            document.getElementById('create-tournament-cancel').addEventListener('click', () =>
+                document.getElementById('create-tournament-modal').classList.remove('active'));
 
-            // Submit create
             document.getElementById('create-tournament-submit').addEventListener('click', createTournament);
 
-            // Detail modal close/join
             document.getElementById('td-close-btn').addEventListener('click', () => {
                 document.getElementById('tournament-detail-modal').classList.remove('active');
+                clearInterval(_tournamentDetailInterval);
+                _tournamentDetailInterval = null;
             });
-            document.getElementById('td-join-btn').addEventListener('click', joinCurrentTournament);
 
-            // Check URL for ?tournament= deep link
+            document.getElementById('td-join-btn').addEventListener('click', joinCurrentTournament);
+            document.getElementById('td-launch-btn').addEventListener('click', launchTournament);
+
+            // Deep link
             const params = new URLSearchParams(window.location.search);
             if (params.get('tournament')) {
-                const tid = params.get('tournament');
-                setTimeout(() => openTournamentDetail(tid), 1000);
+                setTimeout(() => openTournamentDetail(params.get('tournament')), 1000);
             }
         }
 
         async function loadTournamentsPage() {
             if (!supabaseClient) {
-                // Retry after 2s in case Supabase is still connecting
                 document.getElementById('tournaments-list').innerHTML =
                     '<div class="empty-state" style="color:#555;">Connecting…</div>';
                 setTimeout(loadTournamentsPage, 2000);
@@ -2617,102 +2621,200 @@
             }
 
             const now = new Date().toISOString();
+            const weekAgo = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
 
-            // Active/upcoming
             const { data: active } = await supabaseClient
-                .from('tournaments')
-                .select('*')
-                .gte('ends_at', now)
+                .from('tournaments').select('*')
+                .in('status', ['waiting', 'active'])
                 .order('starts_at', { ascending: true });
 
-            // Past (ended in last 7 days)
-            const weekAgo = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
             const { data: past } = await supabaseClient
-                .from('tournaments')
-                .select('*')
-                .lt('ends_at', now)
+                .from('tournaments').select('*')
+                .eq('status', 'finished')
                 .gte('ends_at', weekAgo)
-                .order('ends_at', { ascending: false })
-                .limit(5);
+                .order('ends_at', { ascending: false }).limit(5);
 
             renderTournamentsList(active || [], 'tournaments-list', false);
-            renderTournamentsList(past || [], 'tournaments-past', true);
+            renderTournamentsList(past   || [], 'tournaments-past', true);
 
-            // Subscribe to realtime updates while on this page
             supabaseClient.channel('tournaments-page-live')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, () => {
-                    loadTournamentsPage();
-                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, loadTournamentsPage)
                 .subscribe();
         }
 
-        const ICONS = { fire: '🔥', bolt: '⚡', trophy: '🏆', star: '⭐', crown: '👑' };
+        function fmtCountdown(ms) {
+            if (ms <= 0) return '0m';
+            const h = Math.floor(ms / 3600000);
+            const m = Math.floor((ms % 3600000) / 60000);
+            const s = Math.floor((ms % 60000) / 1000);
+            if (h > 0) return h + 'h ' + m + 'm';
+            if (m > 0) return m + 'm ' + s + 's';
+            return s + 's';
+        }
 
-        function renderTournamentsList(tournaments, containerId, isPast) {
+        function renderTournamentsList(list, containerId, isPast) {
             const el = document.getElementById(containerId);
-            if (!tournaments.length) {
-                el.innerHTML = '<div class="empty-state" style="color:#555;">' +
-                    (isPast ? 'No recent tournaments.' : 'No active tournaments — be the first to create one!') +
-                    '</div>';
+            if (!el) return;
+            if (!list.length) {
+                el.innerHTML = `<div class="empty-state" style="color:#555;">${isPast ? 'No recent tournaments.' : 'No tournaments yet — create one!'}</div>`;
                 return;
             }
-
-            el.innerHTML = tournaments.map(t => {
-                const endsAt = new Date(t.ends_at);
-                const diffMs = endsAt - Date.now();
-                const diffH  = Math.floor(diffMs / 3600000);
-                const diffM  = Math.floor((diffMs % 3600000) / 60000);
-                const timeLabel = isPast ? 'Ended' : (diffH > 0 ? diffH + 'h left' : diffM + 'm left');
+            el.innerHTML = list.map(t => {
                 const icon = ICONS[t.icon] || '🏆';
-                const creatorLabel = t.creator_username ? 'by ' + t.creator_username : '';
+                const startsAt = new Date(t.starts_at_scheduled || t.starts_at);
+                const now = Date.now();
+                let timeLabel;
+                if (isPast) timeLabel = 'Finished';
+                else if (t.status === 'active') timeLabel = '🟢 Live now';
+                else if (startsAt > now) timeLabel = '⏳ Starts in ' + fmtCountdown(startsAt - now);
+                else timeLabel = '⏳ Waiting for players';
 
                 return `
-                    <div class="list-item" style="cursor:pointer;opacity:${isPast ? '0.5' : '1'}"
+                    <div class="list-item" style="cursor:pointer;opacity:${isPast ? 0.55 : 1}"
                          onclick="openTournamentDetail('${t.id}')">
-                        <div class="list-icon ${t.icon || 'trophy'}" style="font-size:1.6rem;width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#262421;">${icon}</div>
+                        <div style="font-size:1.6rem;width:44px;height:44px;display:flex;align-items:center;
+                             justify-content:center;border-radius:50%;background:#262421;">${icon}</div>
                         <div class="list-content">
                             <div class="list-title">${t.name}</div>
-                            <div class="list-meta">${t.time_control} • ${timeLabel} ${creatorLabel}</div>
+                            <div class="list-meta">${t.time_control} • ${timeLabel}</div>
                         </div>
                         <div class="list-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-                            <div class="list-players">👤 ${t.player_count.toLocaleString()}</div>
-                            ${!isPast ? '<div style="font-size:0.7rem;color:#d59020;font-weight:700;">JOIN →</div>' : ''}
+                            <div class="list-players">👤 ${t.player_count}</div>
+                            ${!isPast ? '<div style="font-size:0.7rem;color:#d59020;font-weight:700;">VIEW →</div>' : ''}
                         </div>
                     </div>`;
             }).join('');
         }
 
-        async function openTournamentDetail(tournamentId) {
+        async function openTournamentDetail(tid) {
             if (!supabaseClient) return;
-            const { data: t } = await supabaseClient
-                .from('tournaments')
-                .select('*')
-                .eq('id', tournamentId)
-                .single();
+            _currentTournamentId = tid;
+
+            // Load tournament + participants + matches in parallel
+            const [{ data: t }, { data: participants }, { data: matches }] = await Promise.all([
+                supabaseClient.from('tournaments').select('*').eq('id', tid).single(),
+                supabaseClient.from('tournament_participants').select('*').eq('tournament_id', tid).order('score', { ascending: false }),
+                supabaseClient.from('tournament_matches').select('*').eq('tournament_id', tid).order('round')
+            ]);
+
             if (!t) { showToast('Tournament not found', 2000); return; }
 
-            _currentTournamentId = t.id;
+            const link = location.origin + location.pathname + '?tournament=' + t.id;
+            const isCreator = currentUser?.id === t.creator_id;
+            const isParticipant = participants?.some(p => p.player_id === currentUser?.id);
+            const startsAt = new Date(t.starts_at_scheduled || t.starts_at);
+            const now = Date.now();
 
-            const endsAt = new Date(t.ends_at);
-            const diffMs = endsAt - Date.now();
-            const diffH  = Math.floor(diffMs / 3600000);
-            const diffM  = Math.floor((diffMs % 3600000) / 60000);
-            const timeLeft = diffH > 0 ? diffH + 'h ' + (diffM % 60) + 'm' : diffM + 'm';
-            const link = window.location.origin + window.location.pathname + '?tournament=' + t.id;
-
+            // Header
             document.getElementById('td-name').textContent = (ICONS[t.icon] || '🏆') + ' ' + t.name;
-            document.getElementById('td-meta').textContent = t.time_control + ' Rated';
-            document.getElementById('td-players').textContent = t.player_count.toLocaleString();
-            document.getElementById('td-time-left').textContent = diffMs > 0 ? timeLeft : 'Ended';
+            document.getElementById('td-meta').textContent = t.time_control + ' Rated • ' + (t.min_players || 2) + '+ players to start';
+            document.getElementById('td-players').textContent = t.player_count;
             document.getElementById('td-link').textContent = link;
-            document.getElementById('td-join-btn').style.display = diffMs > 0 ? 'block' : 'none';
+
+            // Status badge + countdown
+            const statusBadge = document.getElementById('td-status-badge');
+            const timeLeftEl  = document.getElementById('td-time-left');
+            const timeLabelEl = document.getElementById('td-time-label');
+
+            if (t.status === 'finished') {
+                statusBadge.textContent = '🏁 Done';
+                timeLeftEl.textContent  = '—';
+                timeLabelEl.textContent = '';
+            } else if (t.status === 'active') {
+                statusBadge.textContent = '🟢 Live';
+                timeLabelEl.textContent = 'Time left';
+            } else {
+                statusBadge.textContent = '⏳ Waiting';
+                timeLabelEl.textContent = startsAt > now ? 'Starts in' : 'Waiting';
+            }
+
+            // Live countdown ticker
+            clearInterval(_tournamentDetailInterval);
+            if (t.status !== 'finished') {
+                _tournamentDetailInterval = setInterval(() => {
+                    const ms = t.status === 'active'
+                        ? new Date(t.ends_at) - Date.now()
+                        : startsAt - Date.now();
+                    timeLeftEl.textContent = ms > 0 ? fmtCountdown(ms) : '—';
+                    // Auto-check if scheduled start time passed and status still waiting
+                    if (t.status === 'waiting' && startsAt <= Date.now() && t.player_count >= (t.min_players || 2) && isCreator) {
+                        clearInterval(_tournamentDetailInterval);
+                        launchTournament();
+                    }
+                }, 1000);
+            }
+
+            // Min players notice
+            const minNotice = document.getElementById('td-min-notice');
+            const needsMore = t.player_count < (t.min_players || 2);
+            minNotice.style.display = needsMore && t.status === 'waiting' ? 'block' : 'none';
+            document.getElementById('td-min-num').textContent = t.min_players || 2;
+
+            // Participants list
+            const pEl = document.getElementById('td-participants');
+            if (!participants || participants.length === 0) {
+                pEl.innerHTML = '<div style="color:#555;font-size:0.82rem;">No participants yet — be the first!</div>';
+            } else {
+                pEl.innerHTML = participants.map((p, i) => `
+                    <div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#1a1816;border-radius:8px;">
+                        <div style="color:#d59020;font-weight:700;width:20px;text-align:center;">${i + 1}</div>
+                        <div style="flex:1;font-size:0.85rem;">${p.player_name || 'Player'}</div>
+                        <div style="font-size:0.78rem;color:#777;">${p.score} pts · ${p.games_played} games</div>
+                        ${p.player_id === currentUser?.id ? '<div style="font-size:0.7rem;color:#d59020;font-weight:700;">YOU</div>' : ''}
+                    </div>`).join('');
+            }
+
+            // Matches
+            const matchSec = document.getElementById('td-matches-section');
+            const matchEl  = document.getElementById('td-matches');
+            if (matches && matches.length > 0) {
+                matchSec.style.display = 'block';
+                document.getElementById('td-round-num').textContent = t.current_round || 1;
+                matchEl.innerHTML = matches
+                    .filter(m => m.round === (t.current_round || 1))
+                    .map(m => {
+                        const winner = m.winner_id
+                            ? (m.winner_id === m.player1_id ? m.player1_name : m.player2_name)
+                            : null;
+                        const statusColor = m.status === 'finished' ? '#4a4' : m.status === 'active' ? '#d59020' : '#555';
+                        const myMatch = m.player1_id === currentUser?.id || m.player2_id === currentUser?.id;
+                        return `
+                            <div style="background:#1a1816;border-radius:8px;padding:10px 12px;
+                                        border-left:3px solid ${statusColor};${myMatch ? 'border-color:#d59020;' : ''}">
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <span style="font-size:0.85rem;">${m.player1_name}</span>
+                                    <span style="color:#555;font-size:0.75rem;">vs</span>
+                                    <span style="font-size:0.85rem;">${m.player2_name}</span>
+                                </div>
+                                ${winner ? `<div style="text-align:center;font-size:0.72rem;color:#4a4;margin-top:4px;">🏆 ${winner} won</div>` : ''}
+                                ${m.status === 'active' && myMatch && m.room_id ? `
+                                    <button onclick="document.getElementById('join-code-input').value='${m.room_id}';document.getElementById('join-confirm-btn').click();document.getElementById('tournament-detail-modal').classList.remove('active');"
+                                        style="margin-top:8px;width:100%;background:#d59020;color:#161512;border:none;padding:7px;border-radius:6px;font-weight:700;font-size:0.8rem;cursor:pointer;">
+                                        ▶ Enter Match Room
+                                    </button>` : ''}
+                            </div>`;
+                    }).join('');
+            } else {
+                matchSec.style.display = 'none';
+            }
+
+            // Button visibility
+            document.getElementById('td-join-btn').style.display =
+                (t.status === 'waiting' && !isParticipant && currentUser) ? 'block' : 'none';
+            document.getElementById('td-launch-btn').style.display =
+                (t.status === 'waiting' && isCreator && t.player_count >= (t.min_players || 2)) ? 'block' : 'none';
 
             document.getElementById('tournament-detail-modal').classList.add('active');
-        }
 
-        function copyTournamentLink() {
-            const link = document.getElementById('td-link').textContent;
-            navigator.clipboard.writeText(link).then(() => showToast('Link copied!', 1500));
+            // Realtime refresh while modal is open
+            supabaseClient.channel('td-live-' + tid)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'tournament_participants',
+                    filter: 'tournament_id=eq.' + tid }, () => openTournamentDetail(tid))
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'tournament_matches',
+                    filter: 'tournament_id=eq.' + tid }, () => openTournamentDetail(tid))
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments',
+                    filter: 'id=eq.' + tid }, () => openTournamentDetail(tid))
+                .subscribe();
         }
 
         async function joinCurrentTournament() {
@@ -2724,38 +2826,157 @@
                 return;
             }
 
-            // Increment player count
-            await supabaseClient.rpc('increment_tournament_count', { tid: _currentTournamentId });
+            const btn = document.getElementById('td-join-btn');
+            btn.textContent = 'Joining…';
+            btn.disabled = true;
 
-            // Navigate to lobby to find a game
-            document.getElementById('tournament-detail-modal').classList.remove('active');
-            document.querySelector('[data-page="lobby"]').click();
-            showToast('You joined the tournament! Find an opponent to play.', 3000);
+            const { error } = await supabaseClient.from('tournament_participants').insert({
+                tournament_id: _currentTournamentId,
+                player_id: currentUser.id,
+                player_name: currentProfile?.username || playerData.settings.username || 'Player',
+                player_rating: playerData.rating || 2.0,
+                score: 0,
+                games_played: 0
+            });
+
+            btn.textContent = 'Join Tournament';
+            btn.disabled = false;
+
+            if (error) {
+                if (error.code === '23505') showToast('You\'re already in this tournament!', 2000);
+                else showToast('Error: ' + error.message, 3000);
+                return;
+            }
+
+            showToast('You joined! Waiting for the tournament to start.', 3000);
+            openTournamentDetail(_currentTournamentId);
+        }
+
+        async function launchTournament() {
+            if (!_currentTournamentId || !currentUser) return;
+
+            const { data: participants } = await supabaseClient
+                .from('tournament_participants').select('*')
+                .eq('tournament_id', _currentTournamentId);
+
+            if (!participants || participants.length < 2) {
+                showToast('Need at least 2 participants to launch!', 2500);
+                return;
+            }
+
+            const btn = document.getElementById('td-launch-btn');
+            btn.textContent = 'Launching…';
+            btn.disabled = true;
+
+            // Shuffle participants for random pairing
+            const shuffled = [...participants].sort(() => Math.random() - 0.5);
+
+            // Create round 1 matches — pair adjacent players
+            const matchInserts = [];
+            for (let i = 0; i < shuffled.length - 1; i += 2) {
+                const p1 = shuffled[i];
+                const p2 = shuffled[i + 1];
+                const roomId = Math.random().toString(36).slice(2, 8).toUpperCase();
+
+                matchInserts.push({
+                    tournament_id: _currentTournamentId,
+                    round: 1,
+                    player1_id: p1.player_id,
+                    player2_id: p2.player_id,
+                    player1_name: p1.player_name,
+                    player2_name: p2.player_name,
+                    room_id: roomId,
+                    status: 'active'
+                });
+
+                // Create the actual Supabase game room for this match
+                const timeLimit = 600; // default 10min — could read from tournament
+                const puzzle = generatePuzzle('medium');
+                await supabaseClient.from('sudoku_rooms').upsert({
+                    id: roomId,
+                    state: {
+                        puzzle: puzzle.puzzle,
+                        solution: puzzle.solution,
+                        board: Array(81).fill(null),
+                        claimedBy: Array(81).fill(null),
+                        scores: { p1: 0, p2: 0 },
+                        timers: { p1: timeLimit, p2: timeLimit },
+                        status: 'waiting',
+                        timeLimit,
+                        tournamentId: _currentTournamentId
+                    },
+                    updated_at: new Date().toISOString()
+                });
+            }
+
+            // If odd number, the last player gets a bye (free win)
+            if (shuffled.length % 2 !== 0) {
+                const byePlayer = shuffled[shuffled.length - 1];
+                // Give them 1 point for the bye
+                await supabaseClient.from('tournament_participants')
+                    .update({ score: 1, games_played: 1 })
+                    .eq('tournament_id', _currentTournamentId)
+                    .eq('player_id', byePlayer.player_id);
+            }
+
+            await supabaseClient.from('tournament_matches').insert(matchInserts);
+
+            // Update tournament status to active
+            const duration = 120; // default 2h — use stored value if available
+            await supabaseClient.from('tournaments').update({
+                status: 'active',
+                starts_at: new Date().toISOString(),
+                ends_at: new Date(Date.now() + duration * 60000).toISOString(),
+                current_round: 1
+            }).eq('id', _currentTournamentId);
+
+            btn.textContent = '🚀 Launch Tournament';
+            btn.disabled = false;
+
+            showToast('🚀 Tournament launched! Matches created.', 3000);
+            openTournamentDetail(_currentTournamentId);
         }
 
         async function createTournament() {
-            const name     = document.getElementById('t-name').value.trim();
-            const tc       = document.getElementById('t-time-control').value;
-            const icon     = document.getElementById('t-icon').value;
-            const duration = parseInt(document.getElementById('t-duration').value);
-            const errEl    = document.getElementById('create-tournament-error');
+            const name       = document.getElementById('t-name').value.trim();
+            const tc         = document.getElementById('t-time-control').value;
+            const icon       = document.getElementById('t-icon').value;
+            const duration   = parseInt(document.getElementById('t-duration').value);
+            const minPlayers = parseInt(document.getElementById('t-min-players')?.value || 2);
+            const maxPlayers = parseInt(document.getElementById('t-max-players')?.value || 16);
+            const startMode  = document.getElementById('t-start-mode')?.value || 'now';
+            const errEl      = document.getElementById('create-tournament-error');
 
             if (!name) { errEl.textContent = 'Please enter a tournament name.'; return; }
             if (!currentUser) { errEl.textContent = 'You must be signed in to create a tournament.'; return; }
+
+            let scheduledAt = null;
+            if (startMode === 'scheduled') {
+                const val = document.getElementById('t-scheduled-at')?.value;
+                if (!val) { errEl.textContent = 'Please pick a scheduled start time.'; return; }
+                scheduledAt = new Date(val);
+                if (scheduledAt <= new Date()) { errEl.textContent = 'Scheduled time must be in the future.'; return; }
+            }
 
             errEl.textContent = '';
             document.getElementById('create-tournament-submit').textContent = 'Creating…';
             document.getElementById('create-tournament-submit').disabled = true;
 
+            // ends_at is calculated from when it actually starts, not now
+            const effectiveStart = scheduledAt || new Date();
             const { data, error } = await supabaseClient.from('tournaments').insert({
                 name,
                 time_control: tc,
                 icon,
-                starts_at: new Date().toISOString(),
-                ends_at: new Date(Date.now() + duration * 60000).toISOString(),
+                status: 'waiting',
+                starts_at: effectiveStart.toISOString(),
+                starts_at_scheduled: scheduledAt ? scheduledAt.toISOString() : null,
+                ends_at: new Date(effectiveStart.getTime() + duration * 60000).toISOString(),
                 player_count: 0,
+                min_players: minPlayers,
+                max_players: maxPlayers,
                 creator_id: currentUser.id,
-                creator_username: currentProfile?.username || 'Anonymous'
+                creator_username: currentProfile?.username || playerData.settings.username || 'Anonymous'
             }).select().single();
 
             document.getElementById('create-tournament-submit').textContent = 'Create Tournament';
@@ -2766,7 +2987,7 @@
             document.getElementById('create-tournament-modal').classList.remove('active');
             loadTournamentsPage();
             openTournamentDetail(data.id);
-            showToast('Tournament created!', 2000);
+            showToast('Tournament created! Share the link to get players.', 3000);
         }
 
         async function tryRestoreSupabase() {
