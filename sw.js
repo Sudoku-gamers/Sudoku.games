@@ -3,9 +3,9 @@
  * Offline-first, background sync, push notifications
  */
 
-const APP_VERSION   = 'v2.3.0';
-const CACHE_STATIC  = `sudoku-static-v2.3.0`;
-const CACHE_RUNTIME = `sudoku-runtime-v2.3.0`;
+const APP_VERSION   = 'v2.4.0';
+const CACHE_STATIC  = `sudoku-static-v2.4.0`;
+const CACHE_RUNTIME = `sudoku-runtime-v2.4.0`;
 
 // Files to pre-cache on install (app shell)
 const PRECACHE_URLS = [
