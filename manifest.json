@@ -6,11 +6,14 @@
   "start_url": "/Sudoku.games/",
   "scope": "/Sudoku.games/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
   "orientation": "portrait-primary",
   "background_color": "#161512",
   "theme_color": "#d59020",
   "lang": "en",
+  "dir": "ltr",
   "categories": ["games", "puzzle"],
+  "iarc_rating_id": "e84b072d-71b3-4d3e-86ae-31a8ce4e53b7",
   "icons": [
     { "src": "icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any" },
     { "src": "icon-96.png",  "sizes": "96x96",   "type": "image/png", "purpose": "any" },
@@ -39,6 +42,32 @@
       "form_factor": "wide",
       "label": "Sudoku.game — Competitive PvP Sudoku"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quick Match",
+      "short_name": "Quick",
+      "description": "Jump straight into a quick match",
+      "url": "/Sudoku.games/?shortcut=quick",
+      "icons": [{ "src": "icon-96.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "vs Computer",
+      "short_name": "vs AI",
+      "description": "Play against the AI",
+      "url": "/Sudoku.games/?shortcut=ai",
+      "icons": [{ "src": "icon-96.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Create Room",
+      "short_name": "Room",
+      "description": "Create a multiplayer room",
+      "url": "/Sudoku.games/?shortcut=room",
+      "icons": [{ "src": "icon-96.png", "sizes": "96x96", "type": "image/png" }]
+    }
+  ],
+  "scope_extensions": [
+    { "origin": "https://sudoku-gamers.github.io" }
   ],
   "prefer_related_applications": false
 }
