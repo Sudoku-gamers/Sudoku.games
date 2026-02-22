@@ -996,7 +996,7 @@ create policy "public rw" on sudoku_rooms
         <div class="modal" style="max-width:380px;">
             <div class="modal-header">
                 <div class="modal-title">Create Tournament</div>
-                <div class="modal-subtitle">Anyone can join via the link</div>
+                <div class="modal-subtitle">Set up and schedule your tournament</div>
             </div>
             <div class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:14px;">
                 <input type="text" class="auth-input" id="t-name" placeholder="Tournament name" maxlength="50">
@@ -1018,19 +1018,51 @@ create policy "public rw" on sudoku_rooms
                 </select>
 
                 <div style="display:flex;flex-direction:column;gap:6px;">
-                    <label style="color:#777;font-size:0.8rem;">Duration</label>
+                    <label style="color:#777;font-size:0.8rem;">Start</label>
+                    <select class="auth-input" id="t-start-mode" style="background:#262421;color:#bababa;border:1px solid #3a3a3a;" onchange="toggleScheduled()">
+                        <option value="now">Start immediately when I launch it</option>
+                        <option value="scheduled">Schedule for later</option>
+                    </select>
+                </div>
+
+                <div id="t-schedule-row" style="display:none;flex-direction:column;gap:6px;">
+                    <label style="color:#777;font-size:0.8rem;">Scheduled start time</label>
+                    <input type="datetime-local" class="auth-input" id="t-scheduled-at"
+                        style="background:#262421;color:#bababa;border:1px solid #3a3a3a;">
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    <label style="color:#777;font-size:0.8rem;">Duration (after start)</label>
                     <select class="auth-input" id="t-duration" style="background:#262421;color:#bababa;border:1px solid #3a3a3a;">
                         <option value="30">30 minutes</option>
                         <option value="60">1 hour</option>
                         <option value="120" selected>2 hours</option>
                         <option value="360">6 hours</option>
                         <option value="1440">24 hours</option>
-                        <option value="10080">7 days</option>
                     </select>
                 </div>
 
-                <div id="create-tournament-error" style="color:#c55;font-size:0.78rem;min-height:16px;"></div>
+                <div style="display:flex;gap:12px;">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                        <label style="color:#777;font-size:0.8rem;">Min players</label>
+                        <select class="auth-input" id="t-min-players" style="background:#262421;color:#bababa;border:1px solid #3a3a3a;">
+                            <option value="2" selected>2</option>
+                            <option value="4">4</option>
+                            <option value="8">8</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                        <label style="color:#777;font-size:0.8rem;">Max players</label>
+                        <select class="auth-input" id="t-max-players" style="background:#262421;color:#bababa;border:1px solid #3a3a3a;">
+                            <option value="8">8</option>
+                            <option value="16" selected>16</option>
+                            <option value="32">32</option>
+                            <option value="64">64</option>
+                        </select>
+                    </div>
+                </div>
 
+                <div id="create-tournament-error" style="color:#c55;font-size:0.78rem;min-height:16px;"></div>
                 <button class="action-btn btn-primary" id="create-tournament-submit">Create Tournament</button>
                 <button class="action-btn btn-secondary" id="create-tournament-cancel">Cancel</button>
             </div>
@@ -1039,31 +1071,54 @@ create policy "public rw" on sudoku_rooms
 
     <!-- Tournament Detail Modal -->
     <div class="modal-overlay" id="tournament-detail-modal">
-        <div class="modal" style="max-width:400px;">
+        <div class="modal" style="max-width:420px;max-height:90vh;overflow-y:auto;">
             <div class="modal-header">
                 <div class="modal-title" id="td-name">Tournament</div>
                 <div class="modal-subtitle" id="td-meta"></div>
             </div>
             <div class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:14px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <div style="text-align:center;flex:1;">
-                        <div style="font-size:1.6rem;font-weight:700;color:#d59020;" id="td-players">0</div>
-                        <div style="font-size:0.75rem;color:#777;">Players</div>
+
+                <!-- Stats row -->
+                <div style="display:flex;justify-content:space-around;background:#1a1816;border-radius:10px;padding:14px;">
+                    <div style="text-align:center;">
+                        <div style="font-size:1.5rem;font-weight:800;color:#d59020;" id="td-players">0</div>
+                        <div style="font-size:0.72rem;color:#777;">Players</div>
                     </div>
-                    <div style="text-align:center;flex:1;">
-                        <div style="font-size:1.6rem;font-weight:700;color:#d59020;" id="td-time-left">—</div>
-                        <div style="font-size:0.75rem;color:#777;">Time Left</div>
+                    <div style="text-align:center;">
+                        <div style="font-size:1.5rem;font-weight:800;color:#d59020;" id="td-status-badge">Waiting</div>
+                        <div style="font-size:0.72rem;color:#777;">Status</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:1.5rem;font-weight:800;color:#d59020;" id="td-time-left">—</div>
+                        <div style="font-size:0.72rem;color:#777;" id="td-time-label">Starts in</div>
                     </div>
                 </div>
-                <div style="background:#1a1816;border-radius:8px;padding:12px;font-size:0.82rem;color:#777;line-height:1.6;">
-                    Join this tournament and play rated games. Your results count toward the leaderboard for this event.
-                    Share the link below to invite others!
+
+                <!-- Min players notice -->
+                <div id="td-min-notice" style="background:rgba(213,144,32,0.08);border:1px solid rgba(213,144,32,0.2);border-radius:8px;padding:10px 12px;font-size:0.8rem;color:#bababa;display:none;">
+                    ⚠ Tournament needs at least <span id="td-min-num">2</span> players to start.
                 </div>
+
+                <!-- Participants list -->
+                <div>
+                    <div style="font-size:0.75rem;color:#777;font-weight:700;letter-spacing:1px;margin-bottom:8px;">PARTICIPANTS</div>
+                    <div id="td-participants" style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;"></div>
+                </div>
+
+                <!-- Matches / bracket -->
+                <div id="td-matches-section" style="display:none;">
+                    <div style="font-size:0.75rem;color:#777;font-weight:700;letter-spacing:1px;margin-bottom:8px;">ROUND <span id="td-round-num">1</span> MATCHES</div>
+                    <div id="td-matches" style="display:flex;flex-direction:column;gap:8px;"></div>
+                </div>
+
+                <!-- Share link -->
                 <div style="display:flex;gap:8px;align-items:center;background:#1a1816;border-radius:8px;padding:10px 12px;">
                     <div style="flex:1;font-size:0.78rem;color:#bababa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="td-link"></div>
                     <button onclick="copyTournamentLink()" style="background:#d59020;color:#161512;border:none;padding:5px 10px;border-radius:5px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;">Copy</button>
                 </div>
+
                 <button class="action-btn btn-primary" id="td-join-btn">Join Tournament</button>
+                <button class="action-btn btn-primary" id="td-launch-btn" style="display:none;background:#2a7a2a;">🚀 Launch Tournament</button>
                 <button class="action-btn btn-secondary" id="td-close-btn">Close</button>
             </div>
         </div>
