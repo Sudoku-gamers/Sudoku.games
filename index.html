@@ -400,39 +400,52 @@ create policy "public rw" on sudoku_rooms
          PROFILE PAGE
          ============================================ -->
     <div class="profile-page" id="profile-page">
-        <!-- Header -->
         <header class="header">
             <div class="header-left">
                 <button class="menu-btn" id="profile-menu-btn">
-                    <span></span>
-                    <span></span>
-                    <span></span>
+                    <span></span><span></span><span></span>
                 </button>
                 <span class="logo">Profile</span>
             </div>
         </header>
 
         <div class="main-content">
-            <div class="page-header">
-                <div class="page-title" id="profile-username">Player</div>
-                <div class="page-subtitle">Member since today</div>
+
+            <!-- ── Avatar + name hero ─────────────────────── -->
+            <div class="prof-hero">
+                <div class="prof-avatar-wrap">
+                    <!-- Shown when avatar_url exists -->
+                    <img id="prof-avatar-img" class="prof-avatar-img" src="" alt="" style="display:none;">
+                    <!-- Fallback initials / emoji -->
+                    <div id="prof-avatar-init" class="prof-avatar-init">P</div>
+                    <!-- Edit button (only own profile, signed in) -->
+                    <label class="prof-avatar-edit-btn" id="prof-avatar-edit-lbl" title="Change photo" style="display:none;">
+                        📷
+                        <input type="file" id="prof-avatar-file" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;">
+                    </label>
+                </div>
+                <div class="prof-hero-text">
+                    <div class="prof-hero-name" id="profile-username">Player</div>
+                    <div class="prof-hero-since" id="profile-since">—</div>
+                    <div class="prof-hero-rating">
+                        <span id="profile-rating" class="prof-hero-rating-val">2.0</span>
+                        <span class="prof-hero-rating-lbl">Overall Rating</span>
+                    </div>
+                </div>
             </div>
 
+            <!-- ── Stats grid ─────────────────────────────── -->
             <div class="profile-stats">
                 <div class="profile-stat-card">
-                    <div class="profile-stat-value" id="profile-rating">2.0</div>
-                    <div class="profile-stat-label">Rating</div>
-                </div>
-                <div class="profile-stat-card">
                     <div class="profile-stat-value" id="profile-games">0</div>
-                    <div class="profile-stat-label">Games Played</div>
+                    <div class="profile-stat-label">Games</div>
                 </div>
                 <div class="profile-stat-card">
-                    <div class="profile-stat-value" id="profile-wins">0</div>
+                    <div class="profile-stat-value" id="profile-wins" style="color:#56d364;">0</div>
                     <div class="profile-stat-label">Wins</div>
                 </div>
                 <div class="profile-stat-card">
-                    <div class="profile-stat-value" id="profile-losses">0</div>
+                    <div class="profile-stat-value" id="profile-losses" style="color:#f05a5a;">0</div>
                     <div class="profile-stat-label">Losses</div>
                 </div>
                 <div class="profile-stat-card">
@@ -453,7 +466,47 @@ create policy "public rw" on sudoku_rooms
                 </div>
             </div>
 
-            <div class="section-label">Achievements</div>
+            <!-- ── Time-control ratings ───────────────────── -->
+            <div class="section-label" style="margin-top:14px;">Ratings by Time Control</div>
+            <div class="tc-grid">
+                <div class="tc-card">
+                    <div class="tc-icon">⚡</div>
+                    <div class="tc-label">Bullet</div>
+                    <div class="tc-val" id="tc-bullet">2.0</div>
+                    <div class="tc-sub">≤ 2 min</div>
+                </div>
+                <div class="tc-card">
+                    <div class="tc-icon">🔥</div>
+                    <div class="tc-label">Blitz</div>
+                    <div class="tc-val" id="tc-blitz">2.0</div>
+                    <div class="tc-sub">3–5 min</div>
+                </div>
+                <div class="tc-card">
+                    <div class="tc-icon">⏱</div>
+                    <div class="tc-label">Rapid</div>
+                    <div class="tc-val" id="tc-rapid">2.0</div>
+                    <div class="tc-sub">10–15 min</div>
+                </div>
+                <div class="tc-card">
+                    <div class="tc-icon">♟</div>
+                    <div class="tc-label">Classical</div>
+                    <div class="tc-val" id="tc-classical">2.0</div>
+                    <div class="tc-sub">20+ min</div>
+                </div>
+            </div>
+
+            <!-- ── Puzzle / Dojo XP ───────────────────────── -->
+            <div class="section-label" style="margin-top:14px;">Technique Dojo</div>
+            <div class="puzzle-xp-row">
+                <div class="puzzle-xp-rank" id="prof-puzzle-rank">🌱 Beginner</div>
+                <div class="puzzle-xp-bar-wrap">
+                    <div class="puzzle-xp-bar" id="prof-puzzle-bar" style="width:0%"></div>
+                </div>
+                <div class="puzzle-xp-num"><span id="prof-puzzle-xp">0</span> XP</div>
+            </div>
+
+            <!-- ── Achievements ───────────────────────────── -->
+            <div class="section-label" style="margin-top:14px;">Achievements</div>
             <div class="profile-badges">
                 <div class="badge-card locked" id="badge-first-win">
                     <div class="badge-icon">🏆</div>
@@ -637,50 +690,6 @@ create policy "public rw" on sudoku_rooms
                 <button class="num-pad-btn" data-num="9">9<span class="num-remaining" id="remaining-9">9</span></button>
             </div>
         </div>
-
-        <!-- ═══ LIVE CHAT (online games only) ═══════════════════ -->
-        <!-- Floating toggle button -->
-        <button id="chat-fab" aria-label="Chat with opponent" style="display:none;">
-            💬<span id="chat-unread" class="chat-unread-dot" style="display:none;"></span>
-        </button>
-
-        <!-- Chat panel — slides up from bottom -->
-        <div id="chat-panel" class="chat-panel" aria-hidden="true">
-            <div class="chat-drag-handle"></div>
-            <div class="chat-header">
-                <div class="chat-header-left">
-                    <span class="chat-header-icon">💬</span>
-                    <span class="chat-header-title">Live Chat</span>
-                    <span id="chat-opp-label" class="chat-opp-label"></span>
-                </div>
-                <button id="chat-close-btn" class="chat-close-btn" aria-label="Close chat">✕</button>
-            </div>
-            <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"></div>
-            <div id="chat-typing-indicator" class="chat-typing" aria-live="polite"></div>
-            <!-- Quick-fire reaction pills -->
-            <div class="chat-reactions" role="group" aria-label="Quick reactions">
-                <button class="chat-pill" data-msg="👍 GG!">👍 GG!</button>
-                <button class="chat-pill" data-msg="🔥 Nice move!">🔥 Nice!</button>
-                <button class="chat-pill" data-msg="😅 Close one!">😅 Close!</button>
-                <button class="chat-pill" data-msg="😂 Lucky!">😂 Lucky!</button>
-                <button class="chat-pill" data-msg="🤝 Rematch?">🤝 Rematch?</button>
-                <button class="chat-pill" data-msg="🏳️ Good game!">🏳️ GG WP!</button>
-            </div>
-            <!-- Text input -->
-            <div class="chat-input-row">
-                <input id="chat-input" class="chat-input" type="text"
-                       placeholder="Say something…" maxlength="140"
-                       autocomplete="off" autocorrect="on" spellcheck="true">
-                <button id="chat-send-btn" class="chat-send-btn" aria-label="Send">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-
-        <!-- Incoming message preview (when chat is closed) -->
-        <div id="chat-preview" class="chat-preview" style="display:none;"></div>
     </div>
 
     <!-- ============================================
@@ -913,7 +922,7 @@ create policy "public rw" on sudoku_rooms
     </div>
 
     <!-- ============================================
-         FRIENDS PAGE
+         FRIENDS / DISCOVER PAGE
          ============================================ -->
     <div class="history-page" id="friends-page">
         <header class="header">
@@ -921,30 +930,97 @@ create policy "public rw" on sudoku_rooms
                 <button class="menu-btn" id="friends-menu-btn">
                     <span></span><span></span><span></span>
                 </button>
-                <span class="logo">Friends</span>
+                <span class="logo">Players</span>
             </div>
         </header>
-        <div class="main-content">
-            <div class="page-header">
-                <div class="page-title">Friends</div>
-                <div class="page-subtitle">Challenge friends to a game</div>
+        <div class="main-content" style="padding-top:0;">
+
+            <!-- Tab bar -->
+            <div class="friends-tabs">
+                <button class="friends-tab active" data-ftab="discover">🌍 Discover</button>
+                <button class="friends-tab" data-ftab="friends">👥 Friends<span id="friends-count-dot" class="tab-dot" style="display:none;"></span></button>
+                <button class="friends-tab" data-ftab="requests">🔔 Requests<span id="pending-count-dot" class="tab-dot tab-dot-alert" style="display:none;"></span></button>
             </div>
 
-            <!-- Add friend -->
-            <div class="friend-search-box">
-                <input type="text" id="friend-search-input" placeholder="Search by username…" maxlength="30">
-                <button id="friend-search-btn">Search</button>
+            <!-- ── DISCOVER tab ─────────────────────────── -->
+            <div class="friends-tab-panel active" id="ftab-discover">
+                <div class="friend-search-box">
+                    <input type="text" id="friend-search-input" placeholder="Search by username…" maxlength="30" autocomplete="off">
+                    <button id="friend-search-btn">Search</button>
+                </div>
+                <div id="friend-search-results"></div>
+
+                <div class="section-label" id="discover-section-lbl" style="margin-top:10px;">Top Players</div>
+                <div id="discover-list">
+                    <div class="empty-state" style="color:#555;">Loading…</div>
+                </div>
+                <button id="discover-more-btn" class="discover-more-btn" style="display:none;">Show more</button>
             </div>
-            <div id="friend-search-results"></div>
 
-            <!-- Pending requests -->
-            <div class="section-label" id="pending-label" style="display:none;">Pending Requests</div>
-            <div id="pending-friends-list"></div>
+            <!-- ── FRIENDS tab ─────────────────────────── -->
+            <div class="friends-tab-panel" id="ftab-friends">
+                <div id="friends-list">
+                    <div class="empty-state" style="color:#555;">Loading…</div>
+                </div>
+            </div>
 
-            <!-- Friends list -->
-            <div class="section-label">Your Friends</div>
-            <div id="friends-list">
-                <div class="empty-state" style="color:#555;">Loading…</div>
+            <!-- ── REQUESTS tab ────────────────────────── -->
+            <div class="friends-tab-panel" id="ftab-requests">
+                <div id="pending-friends-list">
+                    <div class="empty-state" style="color:#555;">No pending requests.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================
+         PUBLIC PROFILE MODAL
+         ============================================ -->
+    <div class="modal-overlay" id="pub-profile-modal">
+        <div class="modal pub-profile-modal">
+            <button class="pub-profile-close" id="pub-profile-close">✕</button>
+
+            <!-- Hero -->
+            <div class="pub-prof-hero">
+                <div class="pub-prof-avatar-wrap">
+                    <img id="pub-prof-img" class="pub-prof-img" src="" alt="" style="display:none;">
+                    <div id="pub-prof-init" class="pub-prof-init">?</div>
+                </div>
+                <div class="pub-prof-name" id="pub-prof-name">—</div>
+                <div class="pub-prof-since" id="pub-prof-since">—</div>
+                <div class="pub-prof-overall">
+                    <span id="pub-prof-rating">2.0</span>
+                    <small>Overall Rating</small>
+                </div>
+            </div>
+
+            <!-- Core stats row -->
+            <div class="pub-prof-stats">
+                <div class="pub-stat"><b id="pub-games">0</b><span>Games</span></div>
+                <div class="pub-stat win"><b id="pub-wins">0</b><span>Wins</span></div>
+                <div class="pub-stat loss"><b id="pub-losses">0</b><span>Losses</span></div>
+                <div class="pub-stat"><b id="pub-wr">0%</b><span>Win Rate</span></div>
+            </div>
+
+            <!-- TC ratings -->
+            <div class="section-label" style="padding:0 16px;margin-top:14px;">Time Controls</div>
+            <div class="pub-tc-grid">
+                <div class="pub-tc"><div class="pub-tc-val" id="pub-bullet">2.0</div><div class="pub-tc-lbl">⚡ Bullet</div></div>
+                <div class="pub-tc"><div class="pub-tc-val" id="pub-blitz">2.0</div><div class="pub-tc-lbl">🔥 Blitz</div></div>
+                <div class="pub-tc"><div class="pub-tc-val" id="pub-rapid">2.0</div><div class="pub-tc-lbl">⏱ Rapid</div></div>
+                <div class="pub-tc"><div class="pub-tc-val" id="pub-classical">2.0</div><div class="pub-tc-lbl">♟ Classical</div></div>
+            </div>
+
+            <!-- Puzzle XP -->
+            <div class="pub-xp-row">
+                <span id="pub-puzzle-rank">🌱 Beginner</span>
+                <span id="pub-puzzle-xp" style="color:#666;font-size:.8rem;"></span>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="pub-prof-actions" id="pub-prof-actions">
+                <button class="pub-prof-btn primary" id="pub-add-btn">+ Add Friend</button>
+                <button class="pub-prof-btn" id="pub-challenge-btn">⚔ Challenge</button>
             </div>
         </div>
     </div>
