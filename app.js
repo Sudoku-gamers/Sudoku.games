@@ -218,31 +218,6 @@
             document.getElementById('profile-draws').textContent = draws;
             document.getElementById('profile-streak').textContent = bestStreak;
 
-            // ── Own avatar (image or initials) ───────────────────────
-            renderOwnAvatar(currentProfile, username);
-
-            // ── Show avatar upload button only when signed in ────────
-            const editLbl = document.getElementById('prof-avatar-edit-lbl');
-            if (editLbl) editLbl.style.display = currentUser ? 'flex' : 'none';
-
-            // ── Member-since date ────────────────────────────────────
-            const sinceEl = document.getElementById('profile-since');
-            if (sinceEl && currentProfile?.created_at) {
-                const d = new Date(currentProfile.created_at);
-                sinceEl.textContent = 'Member since ' + d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
-            }
-
-            // ── Time-control ratings ─────────────────────────────────
-            const tcFields = { 'tc-bullet': 'bullet_rating', 'tc-blitz': 'blitz_rating',
-                               'tc-rapid': 'rapid_rating', 'tc-classical': 'classical_rating' };
-            Object.entries(tcFields).forEach(([elId, field]) => {
-                const el = document.getElementById(elId);
-                if (el) el.textContent = (currentProfile?.[field] || 2.0).toFixed(1);
-            });
-
-            // ── Puzzle XP ─────────────────────────────────────────────
-            renderPuzzleXP(currentProfile);
-
             // Update badges
             updateBadges();
 
@@ -253,47 +228,6 @@
             // Update theme select
             const themeSelect = document.getElementById('theme-select');
             if (themeSelect) themeSelect.value = playerData.settings.boardTheme || 'classic';
-        }
-
-        // Render own profile avatar (image or emoji/initial fallback)
-        function renderOwnAvatar(profile, username) {
-            const img  = document.getElementById('prof-avatar-img');
-            const init = document.getElementById('prof-avatar-init');
-            if (!img || !init) return;
-            if (profile?.avatar_url) {
-                img.src = profile.avatar_url;
-                img.style.display = 'block';
-                init.style.display = 'none';
-            } else {
-                img.style.display = 'none';
-                init.textContent = profile?.avatar_emoji || (username || 'P')[0].toUpperCase();
-                init.style.display = 'flex';
-            }
-        }
-
-        // Render puzzle XP bar + rank on own profile page
-        function renderPuzzleXP(profile) {
-            // Use cloud value if available, else derive from localStorage
-            const localProgress = JSON.parse(localStorage.getItem('sudoku_technique_progress') || '{}');
-            const localXP = Object.values(localProgress).reduce((s, p) => s + (p.xp || 0), 0);
-            const xp = Math.max(localXP, profile?.puzzle_xp || 0);
-            const RANKS = [
-                { name: 'Beginner',     emoji: '🌱', min: 0,   next: 25  },
-                { name: 'Intermediate', emoji: '📈', min: 25,  next: 70  },
-                { name: 'Advanced',     emoji: '🔥', min: 70,  next: 150 },
-                { name: 'Expert',       emoji: '⭐', min: 150, next: 300 },
-                { name: 'Grandmaster',  emoji: '🏆', min: 300, next: 300 },
-            ];
-            const rank = RANKS.slice().reverse().find(r => xp >= r.min) || RANKS[0];
-            const pct = rank.name === 'Grandmaster' ? 100
-                      : Math.min(100, Math.round(((xp - rank.min) / (rank.next - rank.min)) * 100));
-
-            const rankEl = document.getElementById('prof-puzzle-rank');
-            const barEl  = document.getElementById('prof-puzzle-bar');
-            const xpEl   = document.getElementById('prof-puzzle-xp');
-            if (rankEl) rankEl.textContent = rank.emoji + ' ' + rank.name;
-            if (barEl)  barEl.style.width  = pct + '%';
-            if (xpEl)   xpEl.textContent   = xp;
         }
 
         function updateToggle(id, active) {
@@ -682,8 +616,6 @@
                         else renderHistory();
                     } else if (page === 'friends') {
                         if (friendsPage) friendsPage.classList.add('active');
-                        // Always load discover list (works without sign-in)
-                        loadDiscoverList();
                         if (supabaseClient && currentUser) {
                             loadFriends();
                         } else if (supabaseClient) {
@@ -1018,13 +950,6 @@
 
             // Start game
             document.getElementById('start-game-btn').addEventListener('click', startGame);
-            document.getElementById('quick-match-btn').addEventListener('click', () => {
-                gameState.timeLimit = 600;
-                gameState.gameMode = 'simultaneous';
-                gameState.vsAI = false;
-                startGame();
-            });
-
             // Difficulty selection (for puzzles)
             document.querySelectorAll('.difficulty-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -4134,32 +4059,14 @@
                     rating_before: ratingBefore,
                     rating_after: ratingAfter,
                 });
-
-                // Map time limit → per-TC column
-                const tcCol = gameState.timeLimit <= 120  ? 'bullet_rating'
-                            : gameState.timeLimit <= 300  ? 'blitz_rating'
-                            : gameState.timeLimit <= 900  ? 'rapid_rating'
-                            : 'classical_rating';
-
-                // Sync puzzle XP from localStorage to cloud
-                const localProgress = JSON.parse(localStorage.getItem('sudoku_technique_progress') || '{}');
-                const localXP = Object.values(localProgress).reduce((s, p) => s + (p.xp || 0), 0);
-                const puzzleXP = Math.max(localXP, currentProfile?.puzzle_xp || 0);
-                const RANKS = ['Beginner','Intermediate','Advanced','Expert','Grandmaster'];
-                const xpThr = [0, 25, 70, 150, 300];
-                const puzzleRank = RANKS[xpThr.filter(t => puzzleXP >= t).length - 1] || 'Beginner';
-
                 // Update profile stats
                 await supabaseClient.from('profiles').update({
                     rating: ratingAfter,
-                    [tcCol]: ratingAfter,
                     games_played: (currentProfile?.games_played || 0) + 1,
                     wins:   (currentProfile?.wins   || 0) + (result === 'win'  ? 1 : 0),
                     losses: (currentProfile?.losses || 0) + (result === 'loss' ? 1 : 0),
                     draws:  (currentProfile?.draws  || 0) + (result === 'draw' ? 1 : 0),
                     best_streak: Math.max(currentProfile?.best_streak || 0, playerData.stats?.currentStreak || 0),
-                    puzzle_xp: puzzleXP,
-                    puzzle_rank: puzzleRank,
                     updated_at: new Date().toISOString(),
                 }).eq('id', currentUser.id);
                 await loadProfile(currentUser.id);
@@ -4207,7 +4114,7 @@
             if (!supabaseClient) return;
             const { data } = await supabaseClient
                 .from('profiles')
-                .select('id, username, rating, wins, games_played, avatar_url, avatar_emoji')
+                .select('username, rating, wins, games_played, avatar_emoji')
                 .order('rating', { ascending: false })
                 .limit(50);
             if (!data) return;
@@ -4215,43 +4122,38 @@
             if (!list) return;
             list.innerHTML = '';
             data.forEach((p, i) => {
-                const isMe = currentProfile && p.id === currentProfile.id;
+                const isMe = currentProfile && p.username === currentProfile.username;
                 const el = document.createElement('div');
                 el.className = 'leaderboard-item' + (isMe ? ' leaderboard-me' : '');
-                el.style.cursor = 'pointer';
                 const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
-                const avHtml = p.avatar_url
-                    ? `<img src="${p.avatar_url}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;" loading="lazy">`
-                    : (p.avatar_emoji || p.username[0].toUpperCase());
                 el.innerHTML = `
                     <div class="lb-rank">${medal}</div>
-                    <div class="lb-avatar">${avHtml}</div>
+                    <div class="lb-avatar">${p.avatar_emoji || p.username[0].toUpperCase()}</div>
                     <div class="lb-info">
                         <div class="lb-name">${p.username}${isMe ? ' (you)' : ''}</div>
                         <div class="lb-games">${p.wins}W · ${p.games_played} games</div>
                     </div>
                     <div class="lb-rating">${p.rating.toFixed(1)}</div>`;
-                el.addEventListener('click', () => openPublicProfile(p));
                 list.appendChild(el);
             });
         }
 
-        // ============================================================
-        // FRIENDS & DISCOVER SYSTEM
-        // ============================================================
-
+        // ============================================
+        // FRIENDS SYSTEM
+        // ============================================
         async function loadFriends() {
+            const list = document.getElementById('friends-list');
             if (!supabaseClient || !currentUser) {
-                const list = document.getElementById('friends-list');
                 if (list) list.innerHTML = '<div class="empty-state" style="color:#555;">Sign in to see your friends</div>';
                 return;
             }
+            if (list) list.innerHTML = '<div class="empty-state" style="color:#555;">Loading…</div>';
             const { data } = await supabaseClient
                 .from('friendships')
                 .select(`
                     id, status, requester_id, addressee_id,
-                    requester:profiles!friendships_requester_id_fkey(id,username,rating,avatar_url,avatar_emoji,games_played,wins,losses,bullet_rating,blitz_rating,rapid_rating,classical_rating,puzzle_xp,puzzle_rank,created_at),
-                    addressee:profiles!friendships_addressee_id_fkey(id,username,rating,avatar_url,avatar_emoji,games_played,wins,losses,bullet_rating,blitz_rating,rapid_rating,classical_rating,puzzle_xp,puzzle_rank,created_at)
+                    requester:profiles!friendships_requester_id_fkey(id, username, rating, avatar_emoji),
+                    addressee:profiles!friendships_addressee_id_fkey(id, username, rating, avatar_emoji)
                 `)
                 .or(`requester_id.eq.${currentUser.id},addressee_id.eq.${currentUser.id}`);
             if (!data) return;
@@ -4259,15 +4161,18 @@
             const accepted = data.filter(f => f.status === 'accepted');
             const pending  = data.filter(f => f.status === 'pending' && f.addressee_id === currentUser.id);
 
-            // Badges
-            const friendsDot  = document.getElementById('friends-count-dot');
-            const pendingDot  = document.getElementById('pending-count-dot');
-            const friendsBadge = document.getElementById('friends-badge');
-            const notifBadge  = document.getElementById('notif-badge');
-            if (friendsDot)  friendsDot.style.display  = accepted.length > 0 ? 'inline-block' : 'none';
-            if (pendingDot)  pendingDot.style.display   = pending.length  > 0 ? 'inline-block' : 'none';
-            if (friendsBadge){ friendsBadge.textContent = pending.length; friendsBadge.style.display = pending.length > 0 ? 'inline' : 'none'; }
-            if (notifBadge)  { notifBadge.textContent   = pending.length; notifBadge.style.display   = pending.length > 0 ? 'inline' : 'none'; }
+            // Badge count — side menu friends badge
+            const badge = document.getElementById('friends-badge');
+            if (badge) {
+                badge.textContent = pending.length;
+                badge.style.display = pending.length > 0 ? 'inline' : 'none';
+            }
+            // Top-right header notification badge — real pending friend requests
+            const notifBadge = document.getElementById('notif-badge');
+            if (notifBadge) {
+                notifBadge.textContent = pending.length;
+                notifBadge.style.display = pending.length > 0 ? 'inline' : 'none';
+            }
 
             renderFriendsList(accepted);
             renderPendingList(pending);
@@ -4277,152 +4182,89 @@
             const list = document.getElementById('friends-list');
             if (!list) return;
             if (friends.length === 0) {
-                list.innerHTML = '<div class="empty-state">No friends yet — find players in Discover!</div>';
+                list.innerHTML = '<div class="empty-state">No friends yet — search by username to add someone!</div>';
                 return;
             }
             list.innerHTML = '';
             friends.forEach(f => {
                 const other = f.requester_id === currentUser.id ? f.addressee : f.requester;
                 if (!other) return;
-                const card = makePlayerCard(other, null, [
+                const el = makeFriendCard(other, [
                     { label: '⚔ Challenge', cls: 'challenge', action: () => challengeFriend(other) },
                     { label: 'Remove', cls: 'danger', action: () => removeFriend(f.id) },
                 ]);
-                list.appendChild(card);
+                list.appendChild(el);
             });
         }
 
         function renderPendingList(pending) {
             const list = document.getElementById('pending-friends-list');
+            const label = document.getElementById('pending-label');
             if (!list) return;
             if (pending.length === 0) {
-                list.innerHTML = '<div class="empty-state" style="color:#555;">No pending requests.</div>';
+                list.innerHTML = '';
+                if (label) label.style.display = 'none';
                 return;
             }
+            if (label) label.style.display = 'block';
             list.innerHTML = '';
             pending.forEach(f => {
                 const other = f.requester;
                 if (!other) return;
-                const card = makePlayerCard(other, null, [
+                const el = makeFriendCard(other, [
                     { label: '✓ Accept', cls: 'accept', action: () => acceptFriend(f.id) },
                     { label: 'Decline', cls: 'danger', action: () => removeFriend(f.id) },
                 ]);
-                list.appendChild(card);
+                list.appendChild(el);
             });
         }
 
-        // Keep old name for any callers in other parts
-        function makeFriendCard(profile, actions) { return makePlayerCard(profile, null, actions); }
-
-        // ── Universal player row card ────────────────────────────────
-        function makePlayerCard(profile, rank, actions) {
+        function makeFriendCard(profile, actions) {
             const el = document.createElement('div');
-            el.className = 'player-card' + (currentUser && profile.id === currentUser.id ? ' is-me' : '');
-
-            const rankHtml = rank != null
-                ? `<div class="player-card-rank">${rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : '#'+rank}</div>`
-                : '';
-
-            const avHtml = profile.avatar_url
-                ? `<img src="${profile.avatar_url}" alt="" loading="lazy">`
-                : (profile.avatar_emoji || (profile.username||'?')[0].toUpperCase());
-
-            const wr = (profile.games_played||0) > 0
-                ? Math.round(((profile.wins||0) / profile.games_played) * 100) + '%'
-                : '0%';
-            const xpRank = profile.puzzle_rank || 'Beginner';
-
+            el.className = 'friend-card';
             el.innerHTML = `
-                ${rankHtml}
-                <div class="player-card-avatar">${avHtml}</div>
-                <div class="player-card-info">
-                    <div class="player-card-name">${profile.username || '—'}</div>
-                    <div class="player-card-sub">${profile.games_played||0} games · ${wr} WR · ${xpRank}</div>
+                <div class="friend-avatar">${profile.avatar_emoji || profile.username[0].toUpperCase()}</div>
+                <div class="friend-info">
+                    <div class="friend-name">${profile.username}</div>
+                    <div class="friend-rating">Rating: ${profile.rating?.toFixed(1) || '2.0'}</div>
                 </div>
-                <div class="player-card-rating">${(profile.rating||2.0).toFixed(1)}</div>
                 <div class="friend-actions"></div>`;
-
             const actionsEl = el.querySelector('.friend-actions');
-            (actions||[]).forEach(a => {
+            actions.forEach(a => {
                 const btn = document.createElement('button');
-                btn.className = 'friend-btn ' + (a.cls||'');
+                btn.className = 'friend-btn ' + a.cls;
                 btn.textContent = a.label;
-                btn.addEventListener('click', e => { e.stopPropagation(); a.action(); });
+                btn.addEventListener('click', a.action);
                 actionsEl.appendChild(btn);
             });
-
-            // Tap to open public profile
-            el.addEventListener('click', e => {
-                if (!e.target.closest('.friend-actions')) openPublicProfile(profile);
-            });
-
             return el;
         }
 
-        // ── Search ───────────────────────────────────────────────────
         async function searchFriend() {
-            if (!supabaseClient || !currentUser) { showToast('Sign in to add friends', 2000); return; }
-            const query = document.getElementById('friend-search-input')?.value.trim();
-            const resultsEl = document.getElementById('friend-search-results');
-            const labelEl   = document.getElementById('discover-section-lbl');
-            if (!resultsEl) return;
-            resultsEl.innerHTML = '';
-
-            if (!query) { if (labelEl) { labelEl.textContent = 'Top Players'; labelEl.style.display = 'block'; } return; }
-
-            const { data } = await supabaseClient
-                .from('profiles')
-                .select('id,username,rating,avatar_url,avatar_emoji,games_played,wins,losses,bullet_rating,blitz_rating,rapid_rating,classical_rating,puzzle_xp,puzzle_rank,created_at')
-                .ilike('username', `%${query}%`)
-                .neq('id', currentUser.id)
-                .order('rating', { ascending: false })
-                .limit(20);
-
-            if (labelEl) { labelEl.textContent = data?.length ? `Results for "${query}"` : ''; labelEl.style.display = 'block'; }
-            if (!data || data.length === 0) { resultsEl.innerHTML = '<div class="empty-state">No players found.</div>'; return; }
-
-            data.forEach((p, i) => {
-                const card = makePlayerCard(p, i+1, [
-                    { label: '+ Add', cls: '', action: () => sendFriendRequest(p.id, p.username) },
-                ]);
-                resultsEl.appendChild(card);
-            });
-        }
-
-        // ── Discover list — all players ranked by rating ─────────────
-        let _discoverOffset = 0;
-        const DISCOVER_PAGE = 25;
-
-        async function loadDiscoverList(more = false) {
-            if (!supabaseClient) return;
-            if (!more) _discoverOffset = 0;
-            const list = document.getElementById('discover-list');
-            const moreBtn = document.getElementById('discover-more-btn');
-            if (!list) return;
-            if (!more) list.innerHTML = '<div class="empty-state" style="color:#555;">Loading…</div>';
-
-            const { data } = await supabaseClient
-                .from('profiles')
-                .select('id,username,rating,avatar_url,avatar_emoji,games_played,wins,losses,bullet_rating,blitz_rating,rapid_rating,classical_rating,puzzle_xp,puzzle_rank,created_at')
-                .order('rating', { ascending: false })
-                .range(_discoverOffset, _discoverOffset + DISCOVER_PAGE - 1);
-
-            if (!more) list.innerHTML = '';
-            if (!data || data.length === 0) {
-                if (!more) list.innerHTML = '<div class="empty-state" style="color:#555;">No players yet.</div>';
-                if (moreBtn) moreBtn.style.display = 'none';
+            if (!supabaseClient || !currentUser) {
+                showToast('Sign in to add friends', 2000);
                 return;
             }
-
-            data.forEach((p, i) => {
-                const rank = _discoverOffset + i + 1;
-                const actions = (!currentUser || p.id === currentUser.id) ? []
-                    : [{ label: '+ Add', cls: '', action: () => sendFriendRequest(p.id, p.username) }];
-                list.appendChild(makePlayerCard(p, rank, actions));
+            const query = document.getElementById('friend-search-input').value.trim();
+            if (!query) return;
+            const { data } = await supabaseClient
+                .from('profiles').select('id, username, rating, avatar_emoji')
+                .ilike('username', `%${query}%`)
+                .neq('id', currentUser.id)
+                .limit(5);
+            const results = document.getElementById('friend-search-results');
+            if (!results) return;
+            results.innerHTML = '';
+            if (!data || data.length === 0) {
+                results.innerHTML = '<div class="empty-state">No players found.</div>';
+                return;
+            }
+            data.forEach(p => {
+                const el = makeFriendCard(p, [
+                    { label: '+ Add', cls: '', action: () => sendFriendRequest(p.id, p.username) },
+                ]);
+                results.appendChild(el);
             });
-
-            _discoverOffset += data.length;
-            if (moreBtn) moreBtn.style.display = data.length === DISCOVER_PAGE ? 'block' : 'none';
         }
 
         async function sendFriendRequest(addresseeId, username) {
@@ -4452,141 +4294,18 @@
 
         function challengeFriend(profile) {
             showToast(`Creating room to challenge ${profile.username}…`, 2000);
+            // Navigate to lobby and auto-create a room
             document.querySelector('[data-page="lobby"]').click();
-            setTimeout(() => { if (supabaseClient) createOnlineRoom(); }, 500);
-        }
-
-        // ── Public profile modal ─────────────────────────────────────
-        function openPublicProfile(profile) {
-            // Avatar
-            const img  = document.getElementById('pub-prof-img');
-            const init = document.getElementById('pub-prof-init');
-            if (profile.avatar_url) {
-                img.src = profile.avatar_url; img.style.display = 'block'; init.style.display = 'none';
-            } else {
-                img.style.display = 'none';
-                init.textContent = profile.avatar_emoji || (profile.username||'?')[0].toUpperCase();
-                init.style.display = 'flex';
-            }
-
-            // Text
-            document.getElementById('pub-prof-name').textContent    = profile.username || '—';
-            document.getElementById('pub-prof-rating').textContent  = (profile.rating||2.0).toFixed(1);
-            if (profile.created_at) {
-                const d = new Date(profile.created_at);
-                document.getElementById('pub-prof-since').textContent =
-                    'Member since ' + d.toLocaleDateString('en-US',{month:'long',year:'numeric'});
-            }
-
-            // Stats
-            const games = profile.games_played || 0;
-            const wins  = profile.wins || 0;
-            const wr    = games > 0 ? Math.round((wins/games)*100) : 0;
-            document.getElementById('pub-games').textContent  = games;
-            document.getElementById('pub-wins').textContent   = wins;
-            document.getElementById('pub-losses').textContent = profile.losses || 0;
-            document.getElementById('pub-wr').textContent     = wr + '%';
-
-            // TC ratings
-            document.getElementById('pub-bullet').textContent    = (profile.bullet_rating    || 2.0).toFixed(1);
-            document.getElementById('pub-blitz').textContent     = (profile.blitz_rating     || 2.0).toFixed(1);
-            document.getElementById('pub-rapid').textContent     = (profile.rapid_rating     || 2.0).toFixed(1);
-            document.getElementById('pub-classical').textContent = (profile.classical_rating || 2.0).toFixed(1);
-
-            // Puzzle XP
-            const xp   = profile.puzzle_xp   || 0;
-            const rank = profile.puzzle_rank  || 'Beginner';
-            const EMOJIS = {Beginner:'🌱',Intermediate:'📈',Advanced:'🔥',Expert:'⭐',Grandmaster:'🏆'};
-            document.getElementById('pub-puzzle-rank').textContent = (EMOJIS[rank]||'🌱') + ' ' + rank;
-            document.getElementById('pub-puzzle-xp').textContent   = xp + ' XP';
-
-            // Actions
-            const isMe = currentUser && profile.id === currentUser.id;
-            const actionsEl = document.getElementById('pub-prof-actions');
-            if (actionsEl) actionsEl.style.display = isMe ? 'none' : 'flex';
-            const addBtn = document.getElementById('pub-add-btn');
-            const chalBtn = document.getElementById('pub-challenge-btn');
-            if (addBtn)  addBtn.onclick  = () => { sendFriendRequest(profile.id, profile.username); closePublicProfile(); };
-            if (chalBtn) chalBtn.onclick = () => { challengeFriend(profile); closePublicProfile(); };
-
-            document.getElementById('pub-profile-modal').classList.add('active');
-        }
-
-        function closePublicProfile() {
-            document.getElementById('pub-profile-modal')?.classList.remove('active');
-        }
-
-        // ── Avatar upload ────────────────────────────────────────────
-        async function handleAvatarUpload(e) {
-            const file = e.target.files?.[0];
-            if (!file || !supabaseClient || !currentUser) return;
-            if (file.size > 2 * 1024 * 1024) { showToast('Image must be under 2 MB', 2500); return; }
-
-            showToast('Uploading photo…', 30000);
-            try {
-                const ext  = file.name.split('.').pop().toLowerCase() || 'jpg';
-                const path = `${currentUser.id}/avatar.${ext}`;
-                const { error: upErr } = await supabaseClient.storage
-                    .from('avatars')
-                    .upload(path, file, { upsert: true, contentType: file.type });
-                if (upErr) throw upErr;
-
-                const { data: urlData } = supabaseClient.storage.from('avatars').getPublicUrl(path);
-                const publicUrl = urlData?.publicUrl + '?t=' + Date.now();
-
-                await supabaseClient.from('profiles').update({ avatar_url: publicUrl }).eq('id', currentUser.id);
-                await loadProfile(currentUser.id);
-                showToast('✅ Profile photo updated!', 2500);
-                vibrate(40);
-            } catch(err) {
-                showToast('Upload failed: ' + (err.message || err), 3000);
-                console.error('[Avatar]', err);
-            }
-            e.target.value = '';
+            setTimeout(() => {
+                if (supabaseClient) createOnlineRoom();
+            }, 500);
         }
 
         function setupFriendsListeners() {
-            // Search
-            document.getElementById('friend-search-btn')?.addEventListener('click', searchFriend);
-            document.getElementById('friend-search-input')?.addEventListener('keydown', e => {
+            document.getElementById('friend-search-btn').addEventListener('click', searchFriend);
+            document.getElementById('friend-search-input').addEventListener('keydown', e => {
                 if (e.key === 'Enter') searchFriend();
             });
-            document.getElementById('friend-search-input')?.addEventListener('input', e => {
-                if (!e.target.value.trim()) {
-                    document.getElementById('friend-search-results').innerHTML = '';
-                    const lbl = document.getElementById('discover-section-lbl');
-                    if (lbl) { lbl.textContent = 'Top Players'; lbl.style.display = 'block'; }
-                }
-            });
-
-            // Discover tab — load ranked list once when tab shown
-            document.querySelectorAll('.friends-tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    document.querySelectorAll('.friends-tab').forEach(t => t.classList.remove('active'));
-                    document.querySelectorAll('.friends-tab-panel').forEach(p => p.classList.remove('active'));
-                    tab.classList.add('active');
-                    const panel = document.getElementById('ftab-' + tab.dataset.ftab);
-                    if (panel) panel.classList.add('active');
-                    if (tab.dataset.ftab === 'discover') loadDiscoverList();
-                    if (tab.dataset.ftab === 'friends' || tab.dataset.ftab === 'requests') {
-                        if (supabaseClient && currentUser) loadFriends();
-                    }
-                });
-            });
-
-            // Load more
-            document.getElementById('discover-more-btn')?.addEventListener('click', () => loadDiscoverList(true));
-
-            // Public profile modal close
-            document.getElementById('pub-profile-close')?.addEventListener('click', closePublicProfile);
-            document.getElementById('pub-profile-modal')?.addEventListener('click', e => {
-                if (e.target === e.currentTarget) closePublicProfile();
-            });
-
-            // Avatar upload
-            document.getElementById('prof-avatar-file')?.addEventListener('change', handleAvatarUpload);
-
-            // Menu back button
             const friendsMenuBtn = document.getElementById('friends-menu-btn');
             if (friendsMenuBtn) {
                 friendsMenuBtn.addEventListener('click', () => {
@@ -4974,8 +4693,7 @@
                 gameState.timeLimit = 600;
                 gameState.gameMode  = 'simultaneous';
                 gameState.vsAI      = false;
-                const qmBtn = document.getElementById('quick-match-btn');
-                if (qmBtn) qmBtn.click();
+                if (typeof startGame === 'function') startGame();
             }, 1000);
         }
 
