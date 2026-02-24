@@ -4284,6 +4284,8 @@
                 const avHtml = p.avatar_url
                     ? `<img src="${p.avatar_url}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;" loading="lazy">`
                     : (p.avatar_emoji || p.username[0].toUpperCase());
+                el.style.cursor = 'pointer';
+                el.title = 'View profile';
                 el.innerHTML = `
                     <div class="lb-rank">${medal}</div>
                     <div class="lb-avatar">${avHtml}</div>
@@ -4292,6 +4294,7 @@
                         <div class="lb-games">${p.wins || 0}W · ${p.games_played || 0} games</div>
                     </div>
                     <div class="lb-rating">${(p[tcCol] || 2.0).toFixed(1)}</div>`;
+                el.addEventListener('click', () => viewPlayerProfile(p.id));
                 list.appendChild(el);
             });
         }
@@ -4348,16 +4351,113 @@
             return new Date(lastSeen).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         }
 
+
+        // ============================================================
+        // PLAYER PROFILE VIEWER
+        // ============================================================
+        async function viewPlayerProfile(userId) {
+            if (!supabaseClient) return;
+
+            const modal = document.getElementById('player-profile-modal');
+            modal.classList.add('active');
+
+            // Reset to loading state
+            document.getElementById('pp-username').textContent = 'Loading…';
+            document.getElementById('pp-avatar').textContent   = '…';
+            document.getElementById('pp-rating').textContent   = '—';
+            document.getElementById('pp-wins').textContent     = '—';
+            document.getElementById('pp-games').textContent    = '—';
+            document.getElementById('pp-streak').textContent   = '—';
+            document.getElementById('pp-winrate-pct').textContent = '—';
+            document.getElementById('pp-winrate-bar').style.width = '0%';
+            document.getElementById('pp-actions').innerHTML = '';
+            document.getElementById('pp-online').textContent = '';
+
+            const { data: p } = await supabaseClient
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+
+            if (!p) {
+                document.getElementById('pp-username').textContent = 'Player not found';
+                return;
+            }
+
+            // Fill in data
+            document.getElementById('pp-username').textContent = p.username;
+            document.getElementById('pp-avatar').textContent   = p.avatar_emoji || p.username[0].toUpperCase();
+            document.getElementById('pp-rating').textContent   = (p.rating || 2.0).toFixed(1);
+            document.getElementById('pp-wins').textContent     = p.wins || 0;
+            document.getElementById('pp-games').textContent    = p.games_played || 0;
+            document.getElementById('pp-streak').textContent   = (p.current_streak || p.best_streak || 0) + '🔥';
+
+            const winRate = p.games_played > 0
+                ? Math.round((p.wins / p.games_played) * 100)
+                : 0;
+            document.getElementById('pp-winrate-pct').textContent = winRate + '%';
+            setTimeout(() => {
+                document.getElementById('pp-winrate-bar').style.width = winRate + '%';
+            }, 100);
+
+            const isOnline = _onlineUserIds.has(userId);
+            document.getElementById('pp-online').textContent = isOnline ? '● Online now' : '○ Offline';
+            document.getElementById('pp-online').style.color = isOnline ? '#56d364' : '#555';
+
+            // Action buttons
+            const actionsEl = document.getElementById('pp-actions');
+            actionsEl.innerHTML = '';
+
+            if (currentUser && userId !== currentUser.id) {
+                // Check if already friends
+                const { data: friendship } = await supabaseClient
+                    .from('friendships')
+                    .select('id, status')
+                    .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${userId}),and(requester_id.eq.${userId},addressee_id.eq.${currentUser.id})`)
+                    .maybeSingle();
+
+                if (!friendship) {
+                    const addBtn = document.createElement('button');
+                    addBtn.className = 'action-btn btn-secondary';
+                    addBtn.style.flex = '1';
+                    addBtn.textContent = '+ Add Friend';
+                    addBtn.onclick = async () => {
+                        await sendFriendRequest(userId, p.username);
+                        addBtn.textContent = '✓ Sent';
+                        addBtn.disabled = true;
+                    };
+                    actionsEl.appendChild(addBtn);
+                } else if (friendship.status === 'accepted') {
+                    const chalBtn = document.createElement('button');
+                    chalBtn.className = 'action-btn btn-primary';
+                    chalBtn.style.flex = '1';
+                    chalBtn.textContent = '⚔ Challenge';
+                    chalBtn.onclick = () => {
+                        modal.classList.remove('active');
+                        challengeFriend(p);
+                    };
+                    actionsEl.appendChild(chalBtn);
+                } else {
+                    const pendingBtn = document.createElement('button');
+                    pendingBtn.className = 'action-btn btn-secondary';
+                    pendingBtn.style.flex = '1';
+                    pendingBtn.textContent = '⏳ Request Pending';
+                    pendingBtn.disabled = true;
+                    actionsEl.appendChild(pendingBtn);
+                }
+            }
+        }
+
         function makeFriendCard(profile, actions) {
             const isOnline = _onlineUserIds.has(profile.id);
             const el = document.createElement('div');
             el.className = 'friend-card';
             el.innerHTML = `
-                <div class="friend-avatar-wrap">
+                <div class="friend-avatar-wrap" style="cursor:pointer;" onclick="viewPlayerProfile('${profile.id}')">
                     <div class="friend-avatar">${profile.avatar_emoji || profile.username[0].toUpperCase()}</div>
                     ${isOnline ? '<span class="online-dot"></span>' : ''}
                 </div>
-                <div class="friend-info">
+                <div class="friend-info" style="cursor:pointer;" onclick="viewPlayerProfile('${profile.id}')">
                     <div class="friend-name">${profile.username}</div>
                     <div class="friend-status ${isOnline ? 'online' : ''}">
                         ${isOnline ? '● Online' : '○ ' + formatLastSeen(profile.last_seen)}

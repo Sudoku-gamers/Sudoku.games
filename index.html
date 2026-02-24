@@ -1159,6 +1159,57 @@ create policy "public rw" on sudoku_rooms
         </div>
     </div>
 
+
+    <!-- Player Profile Modal -->
+    <div class="modal-overlay" id="player-profile-modal">
+        <div class="modal" style="max-width:360px;">
+            <div class="modal-header" style="position:relative;">
+                <div style="display:flex;align-items:center;gap:14px;">
+                    <div id="pp-avatar" style="width:52px;height:52px;border-radius:50%;background:#d59020;display:flex;align-items:center;justify-content:center;font-size:1.6rem;flex-shrink:0;">?</div>
+                    <div>
+                        <div id="pp-username" class="modal-title" style="margin:0;font-size:1.1rem;"></div>
+                        <div id="pp-online" style="font-size:0.75rem;color:#777;"></div>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('player-profile-modal').classList.remove('active')"
+                    style="position:absolute;top:0;right:0;background:none;border:none;color:#777;font-size:1.4rem;cursor:pointer;padding:4px 8px;">✕</button>
+            </div>
+            <div class="modal-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;">
+                <!-- Stats row -->
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;">
+                    <div style="background:#1a1816;border-radius:8px;padding:10px 4px;">
+                        <div id="pp-rating" style="font-size:1.2rem;font-weight:700;color:#d59020;">—</div>
+                        <div style="font-size:0.65rem;color:#555;margin-top:2px;">RATING</div>
+                    </div>
+                    <div style="background:#1a1816;border-radius:8px;padding:10px 4px;">
+                        <div id="pp-wins" style="font-size:1.2rem;font-weight:700;color:#56d364;">—</div>
+                        <div style="font-size:0.65rem;color:#555;margin-top:2px;">WINS</div>
+                    </div>
+                    <div style="background:#1a1816;border-radius:8px;padding:10px 4px;">
+                        <div id="pp-games" style="font-size:1.2rem;font-weight:700;color:#bababa;">—</div>
+                        <div style="font-size:0.65rem;color:#555;margin-top:2px;">GAMES</div>
+                    </div>
+                    <div style="background:#1a1816;border-radius:8px;padding:10px 4px;">
+                        <div id="pp-streak" style="font-size:1.2rem;font-weight:700;color:#f78166;">—</div>
+                        <div style="font-size:0.65rem;color:#555;margin-top:2px;">STREAK</div>
+                    </div>
+                </div>
+                <!-- Win rate bar -->
+                <div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:#555;margin-bottom:4px;">
+                        <span id="pp-winrate-label">Win rate</span>
+                        <span id="pp-winrate-pct">—</span>
+                    </div>
+                    <div style="height:6px;background:#2a2826;border-radius:3px;overflow:hidden;">
+                        <div id="pp-winrate-bar" style="height:100%;background:#d59020;border-radius:3px;width:0%;transition:width 0.4s ease;"></div>
+                    </div>
+                </div>
+                <!-- Action buttons -->
+                <div id="pp-actions" style="display:flex;gap:8px;margin-top:4px;"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Penalty toast -->
     <div id="penalty-toast"></div>
 
