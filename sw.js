@@ -3,9 +3,9 @@
  * Offline-first, background sync, push notifications
  */
 
-const APP_VERSION   = 'v2.6.0';
-const CACHE_STATIC  = `sudoku-static-v2.6.0`;
-const CACHE_RUNTIME = `sudoku-runtime-v2.6.0`;
+const APP_VERSION   = 'v2.7.0';
+const CACHE_STATIC  = `sudoku-static-v2.7.0`;
+const CACHE_RUNTIME = `sudoku-runtime-v2.7.0`;
 
 // Files to pre-cache on install (app shell)
 const PRECACHE_URLS = [
@@ -99,11 +99,9 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // All app files — NETWORK-FIRST so updates are always instant
-  const isVersionedAsset = url.pathname.endsWith('app.js') 
-    || url.pathname.endsWith('style.css')
-    || url.pathname.endsWith('index.html')
-    || url.pathname.endsWith('/');
+  // app.js and style.css — NETWORK-FIRST so updates are instant
+  // Falls back to cache if offline
+  const isVersionedAsset = url.pathname.endsWith('app.js') || url.pathname.endsWith('style.css') || url.pathname.endsWith('index.html') || url.pathname.endsWith('/');
   if (isVersionedAsset) {
     event.respondWith(
       fetch(request).then(response => {
@@ -120,17 +118,26 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Everything else — network first, cache fallback
+  // index.html and other app shell — cache-first, update in background
   event.respondWith(
-    fetch(request).then(response => {
-      if (response.ok) {
-        const clone = response.clone();
-        caches.open(CACHE_STATIC).then(cache => cache.put(request, clone));
+    caches.open(CACHE_STATIC).then(async cache => {
+      const cached = await cache.match(request);
+      const networkFetch = fetch(request).then(response => {
+        if (response.ok && response.status < 400) {
+          cache.put(request, response.clone());
+        }
+        return response;
+      }).catch(() => null);
+
+      if (cached) {
+        event.waitUntil(networkFetch);
+        return cached;
       }
-      return response;
-    }).catch(async () => {
-      const cached = await caches.match(request);
-      if (cached) return cached;
+
+      const networkResponse = await networkFetch;
+      if (networkResponse) return networkResponse;
+
+      // Offline fallback
       return new Response(getOfflinePage(), {
         headers: { 'Content-Type': 'text/html; charset=utf-8' }
       });

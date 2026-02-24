@@ -4358,23 +4358,26 @@
             if (!supabaseClient) return;
             const modal = document.getElementById('player-profile-modal');
             modal.classList.add('active');
-            document.getElementById('pp-username').textContent = 'Loading…';
-            document.getElementById('pp-avatar').textContent   = '…';
-            document.getElementById('pp-rating').textContent   = '—';
-            document.getElementById('pp-wins').textContent     = '—';
-            document.getElementById('pp-games').textContent    = '—';
-            document.getElementById('pp-streak').textContent   = '—';
-            document.getElementById('pp-winrate-pct').textContent = '—';
+
+            // Reset
+            ['pp-username','pp-bullet','pp-blitz','pp-rapid','pp-classical',
+             'pp-wins','pp-games','pp-streak','pp-winrate-pct','pp-online'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = id === 'pp-username' ? 'Loading…' : '—';
+            });
+            document.getElementById('pp-avatar').textContent = '…';
             document.getElementById('pp-winrate-bar').style.width = '0%';
             document.getElementById('pp-actions').innerHTML = '';
-            document.getElementById('pp-online').textContent = '';
 
             const { data: p } = await supabaseClient.from('profiles').select('*').eq('id', userId).single();
             if (!p) { document.getElementById('pp-username').textContent = 'Player not found'; return; }
 
             document.getElementById('pp-username').textContent = p.username;
             document.getElementById('pp-avatar').textContent   = p.avatar_emoji || p.username[0].toUpperCase();
-            document.getElementById('pp-rating').textContent   = (p.rating || 2.0).toFixed(1);
+            document.getElementById('pp-bullet').textContent   = (p.bullet_rating    || 2.0).toFixed(1);
+            document.getElementById('pp-blitz').textContent    = (p.blitz_rating     || 2.0).toFixed(1);
+            document.getElementById('pp-rapid').textContent    = (p.rapid_rating     || 2.0).toFixed(1);
+            document.getElementById('pp-classical').textContent= (p.classical_rating || 2.0).toFixed(1);
             document.getElementById('pp-wins').textContent     = p.wins || 0;
             document.getElementById('pp-games').textContent    = p.games_played || 0;
             document.getElementById('pp-streak').textContent   = (p.current_streak || 0) + '🔥';
@@ -4394,19 +4397,19 @@
                     .maybeSingle();
 
                 const btn = document.createElement('button');
-                btn.className = 'action-btn btn-primary';
                 btn.style.cssText = 'flex:1;margin:0;';
                 if (!friendship) {
+                    btn.className = 'action-btn btn-secondary';
                     btn.textContent = '+ Add Friend';
                     btn.onclick = async () => { await sendFriendRequest(userId, p.username); btn.textContent = '✓ Sent'; btn.disabled = true; };
                 } else if (friendship.status === 'accepted') {
+                    btn.className = 'action-btn btn-primary';
                     btn.textContent = '⚔ Challenge';
                     btn.onclick = () => { modal.classList.remove('active'); challengeFriend(p); };
                 } else {
+                    btn.className = 'action-btn btn-secondary';
                     btn.textContent = '⏳ Request Pending';
                     btn.disabled = true;
-                    btn.className = 'action-btn btn-secondary';
-                    btn.style.cssText = 'flex:1;margin:0;';
                 }
                 actionsEl.appendChild(btn);
             }
