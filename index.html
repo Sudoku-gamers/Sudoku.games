@@ -1175,7 +1175,6 @@ create policy "public rw" on sudoku_rooms
                     style="position:absolute;top:0;right:0;background:none;border:none;color:#777;font-size:1.4rem;cursor:pointer;padding:4px 8px;">✕</button>
             </div>
             <div class="modal-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;">
-                <!-- Stats row -->
                 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;">
                     <div style="background:#1a1816;border-radius:8px;padding:10px 4px;">
                         <div id="pp-rating" style="font-size:1.2rem;font-weight:700;color:#d59020;">—</div>
@@ -1194,17 +1193,15 @@ create policy "public rw" on sudoku_rooms
                         <div style="font-size:0.65rem;color:#555;margin-top:2px;">STREAK</div>
                     </div>
                 </div>
-                <!-- Win rate bar -->
                 <div>
                     <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:#555;margin-bottom:4px;">
-                        <span id="pp-winrate-label">Win rate</span>
+                        <span>Win rate</span>
                         <span id="pp-winrate-pct">—</span>
                     </div>
                     <div style="height:6px;background:#2a2826;border-radius:3px;overflow:hidden;">
                         <div id="pp-winrate-bar" style="height:100%;background:#d59020;border-radius:3px;width:0%;transition:width 0.4s ease;"></div>
                     </div>
                 </div>
-                <!-- Action buttons -->
                 <div id="pp-actions" style="display:flex;gap:8px;margin-top:4px;"></div>
             </div>
         </div>

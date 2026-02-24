@@ -4285,7 +4285,6 @@
                     ? `<img src="${p.avatar_url}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;" loading="lazy">`
                     : (p.avatar_emoji || p.username[0].toUpperCase());
                 el.style.cursor = 'pointer';
-                el.title = 'View profile';
                 el.innerHTML = `
                     <div class="lb-rank">${medal}</div>
                     <div class="lb-avatar">${avHtml}</div>
@@ -4357,11 +4356,8 @@
         // ============================================================
         async function viewPlayerProfile(userId) {
             if (!supabaseClient) return;
-
             const modal = document.getElementById('player-profile-modal');
             modal.classList.add('active');
-
-            // Reset to loading state
             document.getElementById('pp-username').textContent = 'Loading…';
             document.getElementById('pp-avatar').textContent   = '…';
             document.getElementById('pp-rating').textContent   = '—';
@@ -4373,80 +4369,49 @@
             document.getElementById('pp-actions').innerHTML = '';
             document.getElementById('pp-online').textContent = '';
 
-            const { data: p } = await supabaseClient
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
+            const { data: p } = await supabaseClient.from('profiles').select('*').eq('id', userId).single();
+            if (!p) { document.getElementById('pp-username').textContent = 'Player not found'; return; }
 
-            if (!p) {
-                document.getElementById('pp-username').textContent = 'Player not found';
-                return;
-            }
-
-            // Fill in data
             document.getElementById('pp-username').textContent = p.username;
             document.getElementById('pp-avatar').textContent   = p.avatar_emoji || p.username[0].toUpperCase();
             document.getElementById('pp-rating').textContent   = (p.rating || 2.0).toFixed(1);
             document.getElementById('pp-wins').textContent     = p.wins || 0;
             document.getElementById('pp-games').textContent    = p.games_played || 0;
-            document.getElementById('pp-streak').textContent   = (p.current_streak || p.best_streak || 0) + '🔥';
+            document.getElementById('pp-streak').textContent   = (p.current_streak || 0) + '🔥';
 
-            const winRate = p.games_played > 0
-                ? Math.round((p.wins / p.games_played) * 100)
-                : 0;
+            const winRate = p.games_played > 0 ? Math.round((p.wins / p.games_played) * 100) : 0;
             document.getElementById('pp-winrate-pct').textContent = winRate + '%';
-            setTimeout(() => {
-                document.getElementById('pp-winrate-bar').style.width = winRate + '%';
-            }, 100);
+            setTimeout(() => { document.getElementById('pp-winrate-bar').style.width = winRate + '%'; }, 100);
 
             const isOnline = _onlineUserIds.has(userId);
             document.getElementById('pp-online').textContent = isOnline ? '● Online now' : '○ Offline';
             document.getElementById('pp-online').style.color = isOnline ? '#56d364' : '#555';
 
-            // Action buttons
             const actionsEl = document.getElementById('pp-actions');
-            actionsEl.innerHTML = '';
-
             if (currentUser && userId !== currentUser.id) {
-                // Check if already friends
-                const { data: friendship } = await supabaseClient
-                    .from('friendships')
-                    .select('id, status')
+                const { data: friendship } = await supabaseClient.from('friendships').select('id, status')
                     .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${userId}),and(requester_id.eq.${userId},addressee_id.eq.${currentUser.id})`)
                     .maybeSingle();
 
+                const btn = document.createElement('button');
+                btn.className = 'action-btn btn-primary';
+                btn.style.flex = '1';
+
                 if (!friendship) {
-                    const addBtn = document.createElement('button');
-                    addBtn.className = 'action-btn btn-secondary';
-                    addBtn.style.flex = '1';
-                    addBtn.textContent = '+ Add Friend';
-                    addBtn.onclick = async () => {
-                        await sendFriendRequest(userId, p.username);
-                        addBtn.textContent = '✓ Sent';
-                        addBtn.disabled = true;
-                    };
-                    actionsEl.appendChild(addBtn);
+                    btn.textContent = '+ Add Friend';
+                    btn.onclick = async () => { await sendFriendRequest(userId, p.username); btn.textContent = '✓ Sent'; btn.disabled = true; };
                 } else if (friendship.status === 'accepted') {
-                    const chalBtn = document.createElement('button');
-                    chalBtn.className = 'action-btn btn-primary';
-                    chalBtn.style.flex = '1';
-                    chalBtn.textContent = '⚔ Challenge';
-                    chalBtn.onclick = () => {
-                        modal.classList.remove('active');
-                        challengeFriend(p);
-                    };
-                    actionsEl.appendChild(chalBtn);
+                    btn.textContent = '⚔ Challenge';
+                    btn.onclick = () => { modal.classList.remove('active'); challengeFriend(p); };
                 } else {
-                    const pendingBtn = document.createElement('button');
-                    pendingBtn.className = 'action-btn btn-secondary';
-                    pendingBtn.style.flex = '1';
-                    pendingBtn.textContent = '⏳ Request Pending';
-                    pendingBtn.disabled = true;
-                    actionsEl.appendChild(pendingBtn);
+                    btn.textContent = '⏳ Request Pending';
+                    btn.disabled = true;
+                    btn.className = 'action-btn btn-secondary';
                 }
+                actionsEl.appendChild(btn);
             }
         }
+        window.viewPlayerProfile = viewPlayerProfile;
 
         function makeFriendCard(profile, actions) {
             const isOnline = _onlineUserIds.has(profile.id);
