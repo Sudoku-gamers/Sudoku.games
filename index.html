@@ -267,6 +267,41 @@ create policy "public rw" on sudoku_rooms
                 </div>
             </div>
 
+            <!-- Variant Selection -->
+            <div class="mode-section">
+                <div class="section-label">Sudoku Variant</div>
+                <div class="mode-grid" id="variant-grid" style="grid-template-columns:repeat(2,1fr);gap:8px;">
+                    <div class="mode-card active" data-variant="classic" style="padding:10px 12px;">
+                        <div class="mode-icon" style="font-size:1.2rem;">🟫</div>
+                        <div class="mode-info">
+                            <div class="mode-name" style="font-size:0.85rem;">Classic</div>
+                            <div class="mode-desc" style="font-size:0.7rem;">Standard rules</div>
+                        </div>
+                    </div>
+                    <div class="mode-card" data-variant="diagonal" style="padding:10px 12px;">
+                        <div class="mode-icon" style="font-size:1.2rem;">✖️</div>
+                        <div class="mode-info">
+                            <div class="mode-name" style="font-size:0.85rem;">Diagonal</div>
+                            <div class="mode-desc" style="font-size:0.7rem;">Diagonals = 1–9</div>
+                        </div>
+                    </div>
+                    <div class="mode-card" data-variant="windoku" style="padding:10px 12px;">
+                        <div class="mode-icon" style="font-size:1.2rem;">🪟</div>
+                        <div class="mode-info">
+                            <div class="mode-name" style="font-size:0.85rem;">Windoku</div>
+                            <div class="mode-desc" style="font-size:0.7rem;">4 extra windows</div>
+                        </div>
+                    </div>
+                    <div class="mode-card" data-variant="antiknight" style="padding:10px 12px;">
+                        <div class="mode-icon" style="font-size:1.2rem;">♞</div>
+                        <div class="mode-info">
+                            <div class="mode-name" style="font-size:0.85rem;">Anti-Knight</div>
+                            <div class="mode-desc" style="font-size:0.7rem;">No knight moves</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- AI Toggle -->
             <div class="mode-section">
                 <div class="section-label">Options</div>
@@ -604,6 +639,7 @@ create policy "public rw" on sudoku_rooms
                     <span class="ai-dot"></span>
                     <span id="ai-diff-label">AI</span>
                 </div>
+                <div id="variant-badge" style="display:none;background:rgba(124,111,205,0.2);border:1px solid rgba(124,111,205,0.5);color:#a89fe8;font-size:0.65rem;font-weight:700;padding:3px 8px;border-radius:20px;letter-spacing:0.03em;"></div>
                 <div class="online-badge" id="online-badge">
                     <span class="online-dot"></span>
                     <span>ONLINE</span>
@@ -1175,7 +1211,6 @@ create policy "public rw" on sudoku_rooms
                     style="position:absolute;top:0;right:0;background:none;border:none;color:#777;font-size:1.4rem;cursor:pointer;padding:4px 8px;">✕</button>
             </div>
             <div class="modal-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px;">
-                <!-- Ratings by time control -->
                 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;">
                     <div style="background:#1a1816;border-radius:8px;padding:8px 4px;">
                         <div id="pp-bullet" style="font-size:1rem;font-weight:700;color:#d59020;">—</div>
@@ -1194,7 +1229,6 @@ create policy "public rw" on sudoku_rooms
                         <div style="font-size:0.6rem;color:#555;margin-top:2px;">CLASS.</div>
                     </div>
                 </div>
-                <!-- Wins / Games / Streak -->
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;">
                     <div style="background:#1a1816;border-radius:8px;padding:8px 4px;">
                         <div id="pp-wins" style="font-size:1.1rem;font-weight:700;color:#56d364;">—</div>
@@ -1209,7 +1243,6 @@ create policy "public rw" on sudoku_rooms
                         <div style="font-size:0.6rem;color:#555;margin-top:2px;">STREAK</div>
                     </div>
                 </div>
-                <!-- Win rate bar -->
                 <div>
                     <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:#555;margin-bottom:4px;">
                         <span>Win rate</span><span id="pp-winrate-pct">—</span>

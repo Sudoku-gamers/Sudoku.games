@@ -3,9 +3,9 @@
  * Offline-first, background sync, push notifications
  */
 
-const APP_VERSION   = 'v2.7.0';
-const CACHE_STATIC  = `sudoku-static-v2.7.0`;
-const CACHE_RUNTIME = `sudoku-runtime-v2.7.0`;
+const APP_VERSION   = 'v2.8.0';
+const CACHE_STATIC  = `sudoku-static-v2.8.0`;
+const CACHE_RUNTIME = `sudoku-runtime-v2.8.0`;
 
 // Files to pre-cache on install (app shell)
 const PRECACHE_URLS = [
@@ -101,7 +101,7 @@ self.addEventListener('fetch', event => {
 
   // app.js and style.css — NETWORK-FIRST so updates are instant
   // Falls back to cache if offline
-  const isVersionedAsset = url.pathname.endsWith('app.js') || url.pathname.endsWith('style.css') || url.pathname.endsWith('index.html') || url.pathname.endsWith('/');
+  const isVersionedAsset = url.pathname.endsWith('app.js') || url.pathname.endsWith('style.css');
   if (isVersionedAsset) {
     event.respondWith(
       fetch(request).then(response => {

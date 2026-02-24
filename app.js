@@ -112,6 +112,7 @@
             claims: [],
             pencilMarks: [],  // Track pencil marks for each cell
             
+            variant: 'classic',  // 'classic' | 'diagonal' | 'windoku' | 'antiknight'
             timeLimit: 600,
             gameMode: 'simultaneous',
             vsAI: false,
@@ -463,8 +464,9 @@
         // ============================================================
         // SUDOKU GENERATION ENGINE  (v3 — unique-solution, logic-graded)
         // ============================================================
-        function generateSudoku(difficulty, timeLimit) {
-            const solution = generateCompleteSolution();
+        function generateSudoku(difficulty, timeLimit, variant) {
+            variant = variant || gameState.variant || 'classic';
+            const solution = generateCompleteSolution(variant);
             const puzzle   = solution.map(r => [...r]);
             const CLUE_RANGES = { easy:[36,40], medium:[28,33], hard:[22,27] };
             function tcShift(tl) {
@@ -500,7 +502,8 @@
             }
         }
 
-        function countSolutions(grid, limit) {
+        function countSolutions(grid, limit, variant) {
+            variant = variant || gameState.variant || 'classic';
             let bestR = -1, bestC = -1, bestCount = 10;
             for (let r = 0; r < 9; r++) {
                 for (let c = 0; c < 9; c++) {
@@ -515,9 +518,9 @@
             if (bestR === -1) return 1;
             let count = 0;
             for (let num = 1; num <= 9; num++) {
-                if (!isValidPlacement(grid, bestR, bestC, num)) continue;
+                if (!isValidPlacement(grid, bestR, bestC, num, variant)) continue;
                 grid[bestR][bestC] = num;
-                count += countSolutions(grid, limit - count);
+                count += countSolutions(grid, limit - count, variant);
                 grid[bestR][bestC] = 0;
                 if (count >= limit) break;
             }
@@ -533,10 +536,14 @@
             let count = 0; for (let n = 1; n <= 9; n++) if (!(mask & (1<<n))) count++; return count;
         }
 
-        function generateCompleteSolution() {
+        function generateCompleteSolution(variant) {
+            variant = variant || gameState.variant || 'classic';
             const grid = Array(9).fill(null).map(() => Array(9).fill(0));
-            for (let box = 0; box < 9; box += 3) fillBox(grid, box, box);
-            solveSudoku(grid); return grid;
+            // For classic/antiknight fill diagonal boxes first for speed
+            if (variant === 'classic' || variant === 'antiknight') {
+                for (let box = 0; box < 9; box += 3) fillBox(grid, box, box);
+            }
+            solveSudoku(grid, variant); return grid;
         }
 
         function fillBox(grid, row, col) {
@@ -545,14 +552,15 @@
             for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) grid[row+r][col+c] = nums[idx++];
         }
 
-        function solveSudoku(grid) {
+        function solveSudoku(grid, variant) {
+            variant = variant || gameState.variant || 'classic';
             const empty = findEmptyCell(grid); if (!empty) return true;
             const [row, col] = empty;
             const nums = [1,2,3,4,5,6,7,8,9]; shuffle(nums);
             for (const num of nums) {
-                if (isValidPlacement(grid, row, col, num)) {
+                if (isValidPlacement(grid, row, col, num, variant)) {
                     grid[row][col] = num;
-                    if (solveSudoku(grid)) return true;
+                    if (solveSudoku(grid, variant)) return true;
                     grid[row][col] = 0;
                 }
             }
@@ -564,11 +572,46 @@
             return null;
         }
 
-        function isValidPlacement(grid, row, col, num) {
+        // Windoku extra windows: top-left corners at (1,1),(1,5),(5,1),(5,5)
+        const WINDOKU_WINDOWS = [[1,1],[1,5],[5,1],[5,5]];
+
+        function isValidPlacement(grid, row, col, num, variant) {
+            // Standard row/col/box
             for (let c = 0; c < 9; c++) if (grid[row][c] === num) return false;
             for (let r = 0; r < 9; r++) if (grid[r][col] === num) return false;
             const br = Math.floor(row/3)*3, bc = Math.floor(col/3)*3;
             for (let r = br; r < br+3; r++) for (let c = bc; c < bc+3; c++) if (grid[r][c] === num) return false;
+
+            variant = variant || gameState.variant || 'classic';
+
+            if (variant === 'diagonal') {
+                if (row === col) { // main diagonal
+                    for (let i = 0; i < 9; i++) if (i !== col && grid[row-(row-i)][i] !== undefined && grid[i][i] === num) return false;
+                    for (let i = 0; i < 9; i++) if (grid[i][i] === num && i !== row) return false;
+                }
+                if (row + col === 8) { // anti-diagonal
+                    for (let i = 0; i < 9; i++) if (grid[i][8-i] === num && i !== row) return false;
+                }
+            }
+
+            if (variant === 'windoku') {
+                for (const [wr, wc] of WINDOKU_WINDOWS) {
+                    if (row >= wr && row < wr+3 && col >= wc && col < wc+3) {
+                        for (let r = wr; r < wr+3; r++)
+                            for (let c = wc; c < wc+3; c++)
+                                if (grid[r][c] === num && (r !== row || c !== col)) return false;
+                    }
+                }
+            }
+
+            if (variant === 'antiknight') {
+                const knightMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+                for (const [dr, dc] of knightMoves) {
+                    const nr = row+dr, nc = col+dc;
+                    if (nr>=0&&nr<9&&nc>=0&&nc<9&&grid[nr][nc]===num) return false;
+                }
+            }
+
             return true;
         }
 
@@ -932,6 +975,15 @@
                     document.querySelectorAll('.mode-card[data-mode]').forEach(c => c.classList.remove('active'));
                     card.classList.add('active');
                     gameState.gameMode = card.dataset.mode;
+                });
+            });
+
+            // Variant cards
+            document.querySelectorAll('.mode-card[data-variant]').forEach(card => {
+                card.addEventListener('click', () => {
+                    document.querySelectorAll('.mode-card[data-variant]').forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    gameState.variant = card.dataset.variant;
                 });
             });
 
@@ -2273,19 +2325,40 @@
         }
 
         function isValidMove(row, col, num) {
-            for (let c = 0; c < 9; c++) {
-                if (gameState.puzzle[row][c] === num && c !== col) return false;
+            const grid = gameState.puzzle;
+            // Standard checks
+            for (let c = 0; c < 9; c++) if (grid[row][c] === num && c !== col) return false;
+            for (let r = 0; r < 9; r++) if (grid[r][col] === num && r !== row) return false;
+            const boxRow = Math.floor(row/3)*3, boxCol = Math.floor(col/3)*3;
+            for (let r = boxRow; r < boxRow+3; r++)
+                for (let c = boxCol; c < boxCol+3; c++)
+                    if (grid[r][c] === num && (r !== row || c !== col)) return false;
+
+            const v = gameState.variant || 'classic';
+
+            if (v === 'diagonal') {
+                if (row === col) for (let i = 0; i < 9; i++) if (grid[i][i] === num && i !== row) return false;
+                if (row+col === 8) for (let i = 0; i < 9; i++) if (grid[i][8-i] === num && i !== row) return false;
             }
-            for (let r = 0; r < 9; r++) {
-                if (gameState.puzzle[r][col] === num && r !== row) return false;
-            }
-            const boxRow = Math.floor(row / 3) * 3;
-            const boxCol = Math.floor(col / 3) * 3;
-            for (let r = boxRow; r < boxRow + 3; r++) {
-                for (let c = boxCol; c < boxCol + 3; c++) {
-                    if (gameState.puzzle[r][c] === num && (r !== row || c !== col)) return false;
+
+            if (v === 'windoku') {
+                for (const [wr, wc] of WINDOKU_WINDOWS) {
+                    if (row>=wr&&row<wr+3&&col>=wc&&col<wc+3) {
+                        for (let r=wr; r<wr+3; r++)
+                            for (let c=wc; c<wc+3; c++)
+                                if (grid[r][c]===num&&(r!==row||c!==col)) return false;
+                    }
                 }
             }
+
+            if (v === 'antiknight') {
+                const km = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+                for (const [dr,dc] of km) {
+                    const nr=row+dr, nc=col+dc;
+                    if (nr>=0&&nr<9&&nc>=0&&nc<9&&grid[nr][nc]===num) return false;
+                }
+            }
+
             return true;
         }
 
@@ -3593,6 +3666,7 @@
                     scores: { p1: 0, p2: 0 },
                     currentPlayer: 1,               // ← track whose turn it is
                     moves: [],
+                    variant: gameState.variant || 'classic',
                 },
                 updated_at: new Date().toISOString()
             };
@@ -3623,6 +3697,8 @@
 
             const puzzleData = { puzzle: data.state.puzzle, solution: data.state.solution };
             onlineState._puzzleData = puzzleData;
+            // Restore variant from room so both players use same rules
+            if (data.state.variant) gameState.variant = data.state.variant;
 
             const updatedState = { ...data.state, status: 'playing', p2Name: playerData.settings.username };
             await supabaseClient.from('sudoku_rooms')
@@ -4372,36 +4448,23 @@
             const actionsEl = document.getElementById('pp-actions');
             if (actionsEl) actionsEl.innerHTML = '';
 
-            // Only select columns that definitely exist
             const { data: p, error } = await supabaseClient
                 .from('profiles')
                 .select('id, username, avatar_emoji, rating, wins, games_played, current_streak, bullet_rating, blitz_rating, rapid_rating, classical_rating')
-                .eq('id', userId)
-                .single();
+                .eq('id', userId).single();
 
             if (error || !p) {
-                // Fallback: try with just basic columns
-                const { data: basic } = await supabaseClient
-                    .from('profiles')
-                    .select('id, username, avatar_emoji, rating, wins, games_played')
-                    .eq('id', userId)
-                    .single();
-
-                if (!basic) {
-                    document.getElementById('pp-username').textContent = 'Could not load profile';
-                    return;
-                }
-
+                const { data: basic } = await supabaseClient.from('profiles')
+                    .select('id, username, avatar_emoji, rating, wins, games_played').eq('id', userId).single();
+                if (!basic) { document.getElementById('pp-username').textContent = 'Could not load profile'; return; }
                 document.getElementById('pp-username').textContent = basic.username;
                 if (avatarEl) avatarEl.textContent = basic.avatar_emoji || basic.username[0].toUpperCase();
                 document.getElementById('pp-wins').textContent  = basic.wins || 0;
                 document.getElementById('pp-games').textContent = basic.games_played || 0;
-                // Show single rating for all TC slots as fallback
                 ['pp-bullet','pp-blitz','pp-rapid','pp-classical'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.textContent = (basic.rating || 2.0).toFixed(1);
+                    const el = document.getElementById(id); if (el) el.textContent = (basic.rating || 2.0).toFixed(1);
                 });
-                const wr = basic.games_played > 0 ? Math.round((basic.wins / basic.games_played) * 100) : 0;
+                const wr = basic.games_played > 0 ? Math.round((basic.wins/basic.games_played)*100) : 0;
                 document.getElementById('pp-winrate-pct').textContent = wr + '%';
                 setTimeout(() => { if (barEl) barEl.style.width = wr + '%'; }, 100);
                 return;
@@ -4417,7 +4480,7 @@
             document.getElementById('pp-games').textContent       = p.games_played || 0;
             document.getElementById('pp-streak').textContent      = (p.current_streak || 0) + '🔥';
 
-            const winRate = p.games_played > 0 ? Math.round((p.wins / p.games_played) * 100) : 0;
+            const winRate = p.games_played > 0 ? Math.round((p.wins/p.games_played)*100) : 0;
             document.getElementById('pp-winrate-pct').textContent = winRate + '%';
             setTimeout(() => { if (barEl) barEl.style.width = winRate + '%'; }, 100);
 
@@ -4429,21 +4492,16 @@
                 const { data: friendship } = await supabaseClient.from('friendships').select('id, status')
                     .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${userId}),and(requester_id.eq.${userId},addressee_id.eq.${currentUser.id})`)
                     .maybeSingle();
-
                 const btn = document.createElement('button');
                 btn.style.cssText = 'flex:1;margin:0;';
                 if (!friendship) {
-                    btn.className = 'action-btn btn-secondary';
-                    btn.textContent = '+ Add Friend';
+                    btn.className = 'action-btn btn-secondary'; btn.textContent = '+ Add Friend';
                     btn.onclick = async () => { await sendFriendRequest(userId, p.username); btn.textContent = '✓ Sent'; btn.disabled = true; };
                 } else if (friendship.status === 'accepted') {
-                    btn.className = 'action-btn btn-primary';
-                    btn.textContent = '⚔ Challenge';
+                    btn.className = 'action-btn btn-primary'; btn.textContent = '⚔ Challenge';
                     btn.onclick = () => { modal.classList.remove('active'); challengeFriend(p); };
                 } else {
-                    btn.className = 'action-btn btn-secondary';
-                    btn.textContent = '⏳ Request Pending';
-                    btn.disabled = true;
+                    btn.className = 'action-btn btn-secondary'; btn.textContent = '⏳ Request Pending'; btn.disabled = true;
                 }
                 actionsEl.appendChild(btn);
             }
@@ -4856,6 +4914,19 @@
 
             // Daily streak + notifications
             initStreakNotifications();
+
+            // Variant badge on game screen
+            function updateVariantBadge() {
+                const badge = document.getElementById('variant-badge');
+                if (!badge) return;
+                const labels = { classic: '', diagonal: '✖ Diagonal', windoku: '🪟 Windoku', antiknight: '♞ Anti-Knight' };
+                const label = labels[gameState.variant] || '';
+                badge.textContent = label;
+                badge.style.display = label ? 'inline-block' : 'none';
+            }
+            document.querySelectorAll('.mode-card[data-variant]').forEach(c => {
+                c.addEventListener('click', updateVariantBadge);
+            });
 
             // Hide splash after app is ready
             setTimeout(hideSplash, 1400);
@@ -5377,3 +5448,71 @@
         });
 
     })();
+            // Draw variant overlays
+            const variant = gameState.variant || 'classic';
+
+            if (variant === 'diagonal') {
+                ctx.save();
+                ctx.globalAlpha = 0.10;
+                ctx.fillStyle = '#d59020';
+                // Main diagonal (top-left to bottom-right)
+                for (let i = 0; i < 9; i++) {
+                    ctx.fillRect(i * cellSize, i * cellSize, cellSize, cellSize);
+                }
+                // Anti-diagonal (top-right to bottom-left)
+                for (let i = 0; i < 9; i++) {
+                    ctx.fillRect((8-i) * cellSize, i * cellSize, cellSize, cellSize);
+                }
+                ctx.globalAlpha = 1;
+                // Draw X lines
+                ctx.strokeStyle = 'rgba(213,144,32,0.35)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 3]);
+                ctx.beginPath();
+                ctx.moveTo(0, 0); ctx.lineTo(size, size);
+                ctx.moveTo(size, 0); ctx.lineTo(0, size);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+
+            if (variant === 'windoku') {
+                ctx.save();
+                ctx.globalAlpha = 0.10;
+                ctx.fillStyle = '#7c6fcd';
+                const windows = [[1,1],[1,5],[5,1],[5,5]];
+                for (const [wr, wc] of windows) {
+                    for (let r = wr; r < wr+3; r++) {
+                        for (let c = wc; c < wc+3; c++) {
+                            ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                        }
+                    }
+                }
+                ctx.globalAlpha = 1;
+                // Draw window borders
+                ctx.strokeStyle = 'rgba(124,111,205,0.5)';
+                ctx.lineWidth = 2;
+                for (const [wr, wc] of windows) {
+                    ctx.strokeRect(wc * cellSize + 1, wr * cellSize + 1, cellSize * 3 - 2, cellSize * 3 - 2);
+                }
+                ctx.restore();
+            }
+
+            if (variant === 'antiknight') {
+                // Subtle chess-pattern hint on selected cell
+                if (gameState.selectedCell) {
+                    const { row: sr, col: sc } = gameState.selectedCell;
+                    const km = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+                    ctx.save();
+                    ctx.fillStyle = 'rgba(255,80,80,0.12)';
+                    for (const [dr, dc] of km) {
+                        const nr = sr+dr, nc = sc+dc;
+                        if (nr>=0&&nr<9&&nc>=0&&nc<9) {
+                            ctx.fillRect(nc*cellSize, nr*cellSize, cellSize, cellSize);
+                        }
+                    }
+                    ctx.restore();
+                }
+            }
+
+
