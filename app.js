@@ -170,7 +170,14 @@
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    playerData = { ...playerData, ...parsed };
+                    // Deep merge so new default keys in settings/profile aren't wiped
+                    // by an older save that's missing those fields.
+                    playerData = {
+                        ...playerData,
+                        ...parsed,
+                        settings: { ...playerData.settings, ...(parsed.settings || {}) },
+                        profile:  { ...playerData.profile,  ...(parsed.profile  || {}) },
+                    };
                     playerRating = playerData.profile.rating;
                 } catch (e) {
                     console.error('Error loading player data:', e);
@@ -182,7 +189,15 @@
         function savePlayerData() {
             playerData.profile.rating = playerRating;
             localStorage.setItem('sudoku_player_data', JSON.stringify(playerData));
-            updateAllDisplays();
+            debouncedUpdateAllDisplays();
+        }
+
+        // Debounced wrapper — coalesces rapid successive saves (e.g. rapid moves)
+        // into a single DOM update 150 ms after the last call.
+        let _updateDisplaysTimer = null;
+        function debouncedUpdateAllDisplays() {
+            clearTimeout(_updateDisplaysTimer);
+            _updateDisplaysTimer = setTimeout(updateAllDisplays, 150);
         }
 
         function updateAllDisplays() {
@@ -508,7 +523,7 @@
             for (let r = 0; r < 9; r++) {
                 for (let c = 0; c < 9; c++) {
                     if (grid[r][c] !== 0) continue;
-                    const n = candidateCount(grid, r, c);
+                    const n = candidateCount(grid, r, c, variant);
                     if (n === 0) return 0;
                     if (n < bestCount) { bestCount = n; bestR = r; bestC = c; }
                     if (bestCount === 1) break;
@@ -527,12 +542,34 @@
             return count;
         }
 
-        function candidateCount(grid, row, col) {
+        function candidateCount(grid, row, col, variant) {
+            variant = variant || gameState.variant || 'classic';
             let mask = 0;
             for (let c = 0; c < 9; c++) if (grid[row][c]) mask |= 1 << grid[row][c];
             for (let r = 0; r < 9; r++) if (grid[r][col]) mask |= 1 << grid[r][col];
             const br = Math.floor(row/3)*3, bc = Math.floor(col/3)*3;
             for (let r = br; r < br+3; r++) for (let c = bc; c < bc+3; c++) if (grid[r][c]) mask |= 1 << grid[r][c];
+            // Extra constraints for variants
+            if (variant === 'diagonal') {
+                if (row === col) for (let i = 0; i < 9; i++) if (grid[i][i]) mask |= 1 << grid[i][i];
+                if (row + col === 8) for (let i = 0; i < 9; i++) if (grid[i][8-i]) mask |= 1 << grid[i][8-i];
+            }
+            if (variant === 'windoku') {
+                for (const [wr, wc] of WINDOKU_WINDOWS) {
+                    if (row >= wr && row < wr+3 && col >= wc && col < wc+3) {
+                        for (let r = wr; r < wr+3; r++)
+                            for (let c = wc; c < wc+3; c++)
+                                if (grid[r][c]) mask |= 1 << grid[r][c];
+                    }
+                }
+            }
+            if (variant === 'antiknight') {
+                const km = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+                for (const [dr, dc] of km) {
+                    const nr = row+dr, nc = col+dc;
+                    if (nr >= 0 && nr < 9 && nc >= 0 && nc < 9 && grid[nr][nc]) mask |= 1 << grid[nr][nc];
+                }
+            }
             let count = 0; for (let n = 1; n <= 9; n++) if (!(mask & (1<<n))) count++; return count;
         }
 
@@ -1152,20 +1189,13 @@
             const { row, col } = gameState.selectedCell;
 
             if (gameState.inputMode === 'pencil') {
-                // Pencil mode: toggle pencil mark (with safety checks)
-                if (!gameState.pencilMarks || !gameState.pencilMarks[row] || !gameState.pencilMarks[row][col]) {
-                    // Initialize if needed
-                    if (!gameState.pencilMarks) {
-                        gameState.pencilMarks = Array(9).fill(null).map(() => 
-                            Array(9).fill(null).map(() => new Set())
-                        );
-                    }
-                }
-                
-                if (!gameState.pencilMarks[row][col].has(num)) {
-                    gameState.pencilMarks[row][col].add(num);
+                // Pencil mode: toggle pencil mark
+                // pencilMarks is always initialised as a 9×9 array of Sets in startGame/resumeGame
+                const cell = gameState.pencilMarks[row][col];
+                if (cell.has(num)) {
+                    cell.delete(num);
                 } else {
-                    gameState.pencilMarks[row][col].delete(num);
+                    cell.add(num);
                 }
                 drawGrid();
             } else {
@@ -1179,7 +1209,7 @@
                 // Can only erase own cells
                 gameState.puzzle[row][col] = 0;
                 gameState.claims[row][col] = 0;
-                gameState.scores.p1--;
+                gameState.scores.p1 = Math.max(0, gameState.scores.p1 - 1);
                 updateScores();
             }
             // Clear pencil marks (with safety check)
@@ -1629,12 +1659,13 @@
             const size = 36;
             const cell = size / 9;
 
-            // Board background colors (classic theme)
-            const lightCell = '#f0d9b5';
-            const darkCell  = '#b58863';
+            // Respect the player's chosen board theme
+            const theme = CONFIG.THEMES[playerData.settings.boardTheme] || CONFIG.THEMES.classic;
+            const lightCell = theme.light;
+            const darkCell  = theme.dark;
+            const preColor  = theme.prefilled;
             const p1Color   = 'rgba(74,158,255,0.85)';
             const p2Color   = 'rgba(255,140,74,0.85)';
-            const preColor  = '#a89f91';
 
             for (let r = 0; r < 9; r++) {
                 for (let c = 0; c < 9; c++) {
@@ -2254,8 +2285,10 @@
             const row = Math.floor(y / cellSize);
             
             if (row < 0 || row >= 9 || col < 0 || col >= 9) return;
-            if (gameState.claims[row][col] !== 0) return;
-            
+
+            // Always allow selecting any cell — pre-filled and claimed cells can be
+            // selected to trigger the "highlight matching numbers" visual, even though
+            // input will be blocked in makeMove/handleNumberInput for those cells.
             gameState.selectedCell = { row, col };
             // Highlight the number in this cell (if filled)
             gameState.highlightNumber = gameState.puzzle[row][col] || null;
@@ -2288,15 +2321,16 @@
                 gameState.wrongMoves++;
                 gameState.errorCell = { row, col, startTime: Date.now() };
 
-                // Penalty: lose 10 seconds of time
+                // Penalty: lose 10 seconds of time (not applicable in untimed solo mode)
                 const PENALTY_SECONDS = 10;
-                if (gameState.gameMode === 'simultaneous' || gameState.gameMode === 'solo') {
+                if (gameState.gameMode === 'simultaneous') {
                     gameState.timeRemaining = Math.max(0, gameState.timeRemaining - PENALTY_SECONDS);
                     gameState.p1Time = gameState.timeRemaining;
                     gameState.p2Time = gameState.timeRemaining;
                 } else if (gameState.gameMode === 'passplay') {
                     gameState.p1Time = Math.max(0, gameState.p1Time - PENALTY_SECONDS);
                 }
+                // solo mode is untimed (dojoElapsed counts up) — no time penalty applied
 
                 // Show penalty toast
                 showPenaltyToast(PENALTY_SECONDS);
@@ -2428,15 +2462,22 @@
             if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
                 e.preventDefault();
                 let { row, col } = gameState.selectedCell || { row: 4, col: 4 };
-                if (e.key === 'ArrowUp')    row = Math.max(0, row - 1);
-                if (e.key === 'ArrowDown')  row = Math.min(8, row + 1);
-                if (e.key === 'ArrowLeft')  col = Math.max(0, col - 1);
-                if (e.key === 'ArrowRight') col = Math.min(8, col + 1);
-                // Skip pre-filled cells
-                if (gameState.claims[row][col] !== -1) {
-                    gameState.selectedCell = { row, col };
-                } else {
-                    gameState.selectedCell = { row, col };
+                let dr = 0, dc = 0;
+                if (e.key === 'ArrowUp')    dr = -1;
+                if (e.key === 'ArrowDown')  dr =  1;
+                if (e.key === 'ArrowLeft')  dc = -1;
+                if (e.key === 'ArrowRight') dc =  1;
+
+                // Walk in the chosen direction, skipping pre-filled (claim === -1) cells,
+                // stopping at the board boundary or the first non-prefilled cell.
+                let nr = row + dr, nc = col + dc;
+                while (nr >= 0 && nr < 9 && nc >= 0 && nc < 9) {
+                    if (gameState.claims[nr][nc] !== -1) {
+                        gameState.selectedCell = { row: nr, col: nc };
+                        gameState.highlightNumber = gameState.puzzle[nr][nc] || null;
+                        break;
+                    }
+                    nr += dr; nc += dc;
                 }
                 drawGrid();
                 return;
@@ -2602,7 +2643,9 @@
                 && onlineState.roomId;
 
             if (isRatedGame) {
-                const opponentRating = 2.0 + Math.random() * 3.0;
+                // Use the opponent's real rating if it was stored in the room state;
+                // fall back to the midpoint of the rating scale as a neutral estimate.
+                const opponentRating = onlineState._opponentRating ?? 3.0;
                 if (result === 'win') {
                     const expected = 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 2));
                     ratingChange = Math.max(0.1, Math.min(0.4, 0.4 * (1 - expected)));
@@ -2700,6 +2743,12 @@
         function scheduleAIMove() {
             if (!gameState.isRunning || !gameState.vsAI) return;
             
+            // Cancel any already-pending AI move before scheduling another,
+            // preventing two parallel timers if scheduleAIMove is called from
+            // multiple places (resume, pass & play switch, etc.).
+            clearTimeout(aiTimeout);
+            aiTimeout = null;
+
             const aiConfig = CONFIG.AI_DIFFICULTY[gameState.aiDifficulty];
             
             // Calculate delay based on AI's remaining time
@@ -2716,6 +2765,7 @@
         }
 
         function makeAIMove() {
+            aiTimeout = null; // mark as consumed so scheduleAIMove sees a clean slate
             if (!gameState.isRunning || !gameState.vsAI) return;
             
             // In Pass & Play mode, AI should only move on its turn (Player 2)
@@ -3070,7 +3120,12 @@
                     </div>`;
             }).join('');
 
-            supabaseClient.channel('lobby-tournaments-live')
+            // Remove any existing subscription before creating a new one
+            if (_lobbyTournamentsChannel) {
+                supabaseClient.removeChannel(_lobbyTournamentsChannel);
+                _lobbyTournamentsChannel = null;
+            }
+            _lobbyTournamentsChannel = supabaseClient.channel('lobby-tournaments-live')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, loadTournaments)
                 .subscribe();
         }
@@ -3081,6 +3136,9 @@
         const ICONS = { fire: '🔥', bolt: '⚡', trophy: '🏆', star: '⭐', crown: '👑' };
         let _currentTournamentId = null;
         let _tournamentDetailInterval = null;
+        // Keep references so we can remove old channels before re-subscribing
+        let _lobbyTournamentsChannel = null;
+        let _tournamentPageChannel = null;
 
         // Exposed globally for inline onclick in HTML
         window.toggleScheduled = function() {
@@ -3175,7 +3233,12 @@
             renderTournamentsList(active || [], 'tournaments-list', false);
             renderTournamentsList(past   || [], 'tournaments-past', true);
 
-            supabaseClient.channel('tournaments-page-live')
+            // Remove any existing subscription before creating a new one
+            if (_tournamentPageChannel) {
+                supabaseClient.removeChannel(_tournamentPageChannel);
+                _tournamentPageChannel = null;
+            }
+            _tournamentPageChannel = supabaseClient.channel('tournaments-page-live')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, loadTournamentsPage)
                 .subscribe();
         }
@@ -4331,6 +4394,10 @@
             }
 
             const oppName = mySlot === 1 ? (roomState.p2Name || 'Opponent') : (roomState.p1Name || 'Opponent');
+            // Stash opponent rating for post-game Elo — falls back to 3.0 if not supplied
+            onlineState._opponentRating = mySlot === 1
+                ? (roomState.p2Rating ?? null)
+                : (roomState.p1Rating ?? null);
             document.getElementById('opponent-name').textContent = oppName;
             document.getElementById('opponent-rating').textContent = 'Online';
             document.getElementById('ai-indicator').classList.remove('active');

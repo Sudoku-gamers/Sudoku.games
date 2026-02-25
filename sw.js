@@ -92,7 +92,12 @@ self.addEventListener('fetch', event => {
           if (response.ok) cache.put(request, response.clone());
           return response;
         } catch {
-          return new Response('// CDN unavailable', { headers: { 'Content-Type': 'text/javascript' } });
+          // Return a 503 so the browser treats it as a temporary network failure.
+          // A fake JS body with the wrong Content-Type would silently break fonts, CSS, etc.
+          return new Response(null, {
+            status: 503,
+            statusText: 'Service Unavailable — CDN offline',
+          });
         }
       })
     );
@@ -244,8 +249,9 @@ self.addEventListener('message', event => {
 // ============================================================
 // HELPERS
 // ============================================================
-function getOfflinePage() {
-  return `<!DOCTYPE html>
+
+// Build offline fallback once at module level — no need to rebuild the string per request
+const OFFLINE_PAGE_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -268,6 +274,9 @@ function getOfflinePage() {
   <button onclick="location.reload()">Try Again</button>
 </body>
 </html>`;
+
+function getOfflinePage() {
+  return OFFLINE_PAGE_HTML;
 }
 
 // Minimal IndexedDB helpers for background sync queue
