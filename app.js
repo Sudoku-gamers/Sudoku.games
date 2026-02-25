@@ -2048,6 +2048,179 @@
                 ctx.lineTo(size, pos);
                 ctx.stroke();
             }
+
+            // ── VARIANT OVERLAYS ────────────────────────────────────
+            const variant = gameState.variant || 'classic';
+
+            // DIAGONAL
+            if (variant === 'diagonal') {
+                ctx.save();
+                ctx.globalAlpha = 0.10; ctx.fillStyle = '#d59020';
+                for (let i=0;i<9;i++) ctx.fillRect(i*cellSize, i*cellSize, cellSize, cellSize);
+                for (let i=0;i<9;i++) ctx.fillRect((8-i)*cellSize, i*cellSize, cellSize, cellSize);
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = 'rgba(213,144,32,0.35)'; ctx.lineWidth = 2; ctx.setLineDash([4,3]);
+                ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(size,size);
+                ctx.moveTo(size,0); ctx.lineTo(0,size); ctx.stroke();
+                ctx.setLineDash([]); ctx.restore();
+            }
+
+            // WINDOKU
+            if (variant === 'windoku') {
+                ctx.save(); ctx.globalAlpha = 0.10; ctx.fillStyle = '#7c6fcd';
+                const wins = [[1,1],[1,5],[5,1],[5,5]];
+                for (const [wr,wc] of wins)
+                    for (let r=wr;r<wr+3;r++) for (let c=wc;c<wc+3;c++)
+                        ctx.fillRect(c*cellSize, r*cellSize, cellSize, cellSize);
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = 'rgba(124,111,205,0.5)'; ctx.lineWidth = 2;
+                for (const [wr,wc] of wins)
+                    ctx.strokeRect(wc*cellSize+1, wr*cellSize+1, cellSize*3-2, cellSize*3-2);
+                ctx.restore();
+            }
+
+            // ANTI-KNIGHT — highlight forbidden cells for selected cell
+            if (variant === 'antiknight' && gameState.selectedCell) {
+                const {row:sr,col:sc} = gameState.selectedCell;
+                const km=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+                ctx.save(); ctx.fillStyle = 'rgba(255,80,80,0.14)';
+                for (const [dr,dc] of km) {
+                    const nr=sr+dr, nc=sc+dc;
+                    if (nr>=0&&nr<9&&nc>=0&&nc<9) ctx.fillRect(nc*cellSize, nr*cellSize, cellSize, cellSize);
+                }
+                ctx.restore();
+            }
+
+            // KILLER — dashed cage borders + sum labels
+            if (variant === 'killer' && variantData.cages && variantData.killerAssigned) {
+                const asgn = variantData.killerAssigned;
+                ctx.save();
+                ctx.strokeStyle = 'rgba(213,144,32,0.75)'; ctx.lineWidth = 1.5; ctx.setLineDash([3,2]);
+                for (let r=0;r<9;r++) for (let c=0;c<9;c++) {
+                    const id=asgn[r][c], x=c*cellSize, y=r*cellSize;
+                    if (r===0||asgn[r-1][c]!==id){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+cellSize,y);ctx.stroke();}
+                    if (r===8||asgn[r+1][c]!==id){ctx.beginPath();ctx.moveTo(x,y+cellSize);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke();}
+                    if (c===0||asgn[r][c-1]!==id){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+cellSize);ctx.stroke();}
+                    if (c===8||asgn[r][c+1]!==id){ctx.beginPath();ctx.moveTo(x+cellSize,y);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke();}
+                }
+                ctx.setLineDash([]);
+                ctx.font = `bold ${Math.max(8,cellSize*0.22)}px sans-serif`;
+                ctx.fillStyle = '#d59020'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+                for (const cage of variantData.cages) {
+                    const [tr,tc] = cage.cells.reduce(([mr,mc],[r,c])=>r<mr||(r===mr&&c<mc)?[r,c]:[mr,mc]);
+                    ctx.fillText(String(cage.sum), tc*cellSize+2, tr*cellSize+2);
+                }
+                ctx.restore();
+            }
+
+            // JIGSAW — colored region shading + thick borders between regions
+            if (variant === 'jigsaw' && variantData.regions) {
+                const reg = variantData.regions;
+                const regionFill = [
+                    'rgba(213,144,32,0.12)','rgba(74,158,255,0.12)','rgba(86,211,100,0.12)',
+                    'rgba(255,140,74,0.12)','rgba(180,100,220,0.12)','rgba(240,90,90,0.12)',
+                    'rgba(255,220,80,0.12)','rgba(80,200,180,0.12)','rgba(150,150,255,0.12)',
+                ];
+                const regionBorder = [
+                    'rgba(213,144,32,0.7)','rgba(74,158,255,0.7)','rgba(86,211,100,0.7)',
+                    'rgba(255,140,74,0.7)','rgba(180,100,220,0.7)','rgba(240,90,90,0.7)',
+                    'rgba(255,220,80,0.7)','rgba(80,200,180,0.7)','rgba(150,150,255,0.7)',
+                ];
+                ctx.save();
+                for (let r=0;r<9;r++) for (let c=0;c<9;c++) {
+                    ctx.fillStyle = regionFill[reg[r][c]%9];
+                    ctx.fillRect(c*cellSize, r*cellSize, cellSize, cellSize);
+                }
+                ctx.lineWidth = 2.5;
+                for (let r=0;r<9;r++) for (let c=0;c<9;c++) {
+                    const id=reg[r][c], x=c*cellSize, y=r*cellSize;
+                    ctx.strokeStyle = regionBorder[id%9];
+                    if (r===0||reg[r-1][c]!==id){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+cellSize,y);ctx.stroke();}
+                    if (r===8||reg[r+1][c]!==id){ctx.beginPath();ctx.moveTo(x,y+cellSize);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke();}
+                    if (c===0||reg[r][c-1]!==id){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+cellSize);ctx.stroke();}
+                    if (c===8||reg[r][c+1]!==id){ctx.beginPath();ctx.moveTo(x+cellSize,y);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke();}
+                }
+                ctx.restore();
+            }
+
+            // THERMO — grey tubes + filled bulb at start
+            if (variant === 'thermo' && variantData.thermos) {
+                ctx.save();
+                for (const thermo of variantData.thermos) {
+                    ctx.strokeStyle = 'rgba(190,190,190,0.4)';
+                    ctx.lineWidth = cellSize*0.32; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                    ctx.beginPath();
+                    for (let i=0;i<thermo.length;i++) {
+                        const [r,c]=thermo[i], x=c*cellSize+cellSize/2, y=r*cellSize+cellSize/2;
+                        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+                    }
+                    ctx.stroke();
+                    const [br2,bc2]=thermo[0];
+                    ctx.fillStyle='rgba(190,190,190,0.55)';
+                    ctx.beginPath();
+                    ctx.arc(bc2*cellSize+cellSize/2, br2*cellSize+cellSize/2, cellSize*0.3, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            // CONSECUTIVE — white bar between pairs that must be consecutive
+            if (variant === 'consecutive' && variantData.consecutivePairs) {
+                ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.75)';
+                for (const p of variantData.consecutivePairs) {
+                    const mx=((p.c1+p.c2)/2+0.5)*cellSize, my=((p.r1+p.r2)/2+0.5)*cellSize;
+                    const bw=p.r1===p.r2?4:cellSize*0.5, bh=p.r1===p.r2?cellSize*0.5:4;
+                    ctx.fillRect(mx-bw/2, my-bh/2, bw, bh);
+                }
+                ctx.restore();
+            }
+
+            // ARROW — shaft from circle + arrowhead
+            if (variant === 'arrow' && variantData.arrows) {
+                ctx.save();
+                for (const arrow of variantData.arrows) {
+                    const [cr,cc]=arrow.circle;
+                    ctx.strokeStyle='rgba(180,180,180,0.5)';
+                    ctx.lineWidth=cellSize*0.12; ctx.lineCap='round';
+                    ctx.beginPath();
+                    ctx.moveTo(cc*cellSize+cellSize/2, cr*cellSize+cellSize/2);
+                    for (const [r,c] of arrow.cells) ctx.lineTo(c*cellSize+cellSize/2, r*cellSize+cellSize/2);
+                    ctx.stroke();
+                    ctx.strokeStyle='rgba(180,180,180,0.65)'; ctx.lineWidth=1.5;
+                    ctx.beginPath();
+                    ctx.arc(cc*cellSize+cellSize/2, cr*cellSize+cellSize/2, cellSize*0.34, 0, Math.PI*2);
+                    ctx.stroke();
+                    const last=arrow.cells[arrow.cells.length-1];
+                    const prev2=arrow.cells.length>1?arrow.cells[arrow.cells.length-2]:arrow.circle;
+                    const angle=Math.atan2(last[0]-prev2[0], last[1]-prev2[1]);
+                    const ax=last[1]*cellSize+cellSize/2, ay=last[0]*cellSize+cellSize/2;
+                    ctx.fillStyle='rgba(180,180,180,0.6)';
+                    ctx.beginPath();
+                    ctx.moveTo(ax+Math.cos(angle)*cellSize*0.2, ay+Math.sin(angle)*cellSize*0.2);
+                    ctx.lineTo(ax+Math.cos(angle-2.5)*cellSize*0.13, ay+Math.sin(angle-2.5)*cellSize*0.13);
+                    ctx.lineTo(ax+Math.cos(angle+2.5)*cellSize*0.13, ay+Math.sin(angle+2.5)*cellSize*0.13);
+                    ctx.closePath(); ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            // EVEN-ODD — circle=even, rounded-square=odd
+            if (variant === 'evenodd' && variantData.evenOddMask) {
+                ctx.save();
+                for (let r=0;r<9;r++) for (let c=0;c<9;c++) {
+                    const m=variantData.evenOddMask[r][c]; if(!m) continue;
+                    const x=c*cellSize, y=r*cellSize, pd=cellSize*0.1;
+                    ctx.fillStyle='rgba(140,140,160,0.25)';
+                    if (m==='even') {
+                        ctx.beginPath();
+                        ctx.arc(x+cellSize/2, y+cellSize/2, cellSize*0.38, 0, Math.PI*2);
+                        ctx.fill();
+                    } else {
+                        ctx.fillRect(x+pd, y+pd, cellSize-pd*2, cellSize-pd*2);
+                    }
+                }
+                ctx.restore();
+            }
         }
 
         // ============================================
@@ -5753,184 +5926,5 @@
         });
 
     })();
-            // ── VARIANT OVERLAYS (drawn after numbers, before nothing) ──
-            const variant = gameState.variant || 'classic';
-
-            // DIAGONAL
-            if (variant === 'diagonal') {
-                ctx.save();
-                ctx.globalAlpha = 0.10; ctx.fillStyle = '#d59020';
-                for (let i=0;i<9;i++) ctx.fillRect(i*cellSize, i*cellSize, cellSize, cellSize);
-                for (let i=0;i<9;i++) ctx.fillRect((8-i)*cellSize, i*cellSize, cellSize, cellSize);
-                ctx.globalAlpha = 1;
-                ctx.strokeStyle = 'rgba(213,144,32,0.35)'; ctx.lineWidth = 2; ctx.setLineDash([4,3]);
-                ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(size,size);
-                ctx.moveTo(size,0); ctx.lineTo(0,size); ctx.stroke();
-                ctx.setLineDash([]); ctx.restore();
-            }
-
-            // WINDOKU
-            if (variant === 'windoku') {
-                ctx.save(); ctx.globalAlpha = 0.10; ctx.fillStyle = '#7c6fcd';
-                const wins = [[1,1],[1,5],[5,1],[5,5]];
-                for (const [wr,wc] of wins)
-                    for (let r=wr;r<wr+3;r++) for (let c=wc;c<wc+3;c++)
-                        ctx.fillRect(c*cellSize, r*cellSize, cellSize, cellSize);
-                ctx.globalAlpha = 1;
-                ctx.strokeStyle = 'rgba(124,111,205,0.5)'; ctx.lineWidth = 2;
-                for (const [wr,wc] of wins)
-                    ctx.strokeRect(wc*cellSize+1, wr*cellSize+1, cellSize*3-2, cellSize*3-2);
-                ctx.restore();
-            }
-
-            // ANTI-KNIGHT — highlight forbidden cells for selected cell
-            if (variant === 'antiknight' && gameState.selectedCell) {
-                const {row:sr,col:sc} = gameState.selectedCell;
-                const km=[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
-                ctx.save(); ctx.fillStyle = 'rgba(255,80,80,0.14)';
-                for (const [dr,dc] of km) {
-                    const nr=sr+dr, nc=sc+dc;
-                    if (nr>=0&&nr<9&&nc>=0&&nc<9) ctx.fillRect(nc*cellSize, nr*cellSize, cellSize, cellSize);
-                }
-                ctx.restore();
-            }
-
-            // KILLER — cage borders + sum labels
-            if (variant === 'killer' && variantData.cages && variantData.killerAssigned) {
-                const asgn = variantData.killerAssigned;
-                ctx.save();
-                ctx.strokeStyle = 'rgba(213,144,32,0.75)'; ctx.lineWidth = 1.5; ctx.setLineDash([3,2]);
-                for (let r=0;r<9;r++) for (let c=0;c<9;c++) {
-                    const id = asgn[r][c]; const x=c*cellSize, y=r*cellSize;
-                    if (r===0||asgn[r-1][c]!==id) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+cellSize,y); ctx.stroke(); }
-                    if (r===8||asgn[r+1][c]!==id) { ctx.beginPath(); ctx.moveTo(x,y+cellSize); ctx.lineTo(x+cellSize,y+cellSize); ctx.stroke(); }
-                    if (c===0||asgn[r][c-1]!==id) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+cellSize); ctx.stroke(); }
-                    if (c===8||asgn[r][c+1]!==id) { ctx.beginPath(); ctx.moveTo(x+cellSize,y); ctx.lineTo(x+cellSize,y+cellSize); ctx.stroke(); }
-                }
-                ctx.setLineDash([]);
-                // Sum label in top-left cell of each cage
-                ctx.font = `bold ${Math.max(8,cellSize*0.22)}px sans-serif`;
-                ctx.fillStyle = '#d59020'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-                for (const cage of variantData.cages) {
-                    const [tr,tc] = cage.cells.reduce(([mr,mc],[r,c])=>r<mr||(r===mr&&c<mc)?[r,c]:[mr,mc]);
-                    ctx.fillText(String(cage.sum), tc*cellSize+2, tr*cellSize+2);
-                }
-                ctx.restore();
-            }
-
-            // JIGSAW — color-coded region shading + thick region borders
-            if (variant === 'jigsaw' && variantData.regions) {
-                const reg = variantData.regions;
-                const regionFill = [
-                    'rgba(213,144,32,0.10)','rgba(74,158,255,0.10)','rgba(86,211,100,0.10)',
-                    'rgba(255,140,74,0.10)','rgba(180,100,220,0.10)','rgba(240,90,90,0.10)',
-                    'rgba(255,220,80,0.10)','rgba(80,200,180,0.10)','rgba(150,150,255,0.10)',
-                ];
-                const regionBorder = [
-                    'rgba(213,144,32,0.55)','rgba(74,158,255,0.55)','rgba(86,211,100,0.55)',
-                    'rgba(255,140,74,0.55)','rgba(180,100,220,0.55)','rgba(240,90,90,0.55)',
-                    'rgba(255,220,80,0.55)','rgba(80,200,180,0.55)','rgba(150,150,255,0.55)',
-                ];
-                ctx.save();
-                for (let r=0;r<9;r++) for (let c=0;c<9;c++) {
-                    ctx.fillStyle = regionFill[reg[r][c]%9];
-                    ctx.fillRect(c*cellSize, r*cellSize, cellSize, cellSize);
-                }
-                ctx.lineWidth = 2.5;
-                for (let r=0;r<9;r++) for (let c=0;c<9;c++) {
-                    const id = reg[r][c]; const x=c*cellSize, y=r*cellSize;
-                    ctx.strokeStyle = regionBorder[id%9];
-                    if (r===0||reg[r-1][c]!==id){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+cellSize,y);ctx.stroke();}
-                    if (r===8||reg[r+1][c]!==id){ctx.beginPath();ctx.moveTo(x,y+cellSize);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke();}
-                    if (c===0||reg[r][c-1]!==id){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+cellSize);ctx.stroke();}
-                    if (c===8||reg[r][c+1]!==id){ctx.beginPath();ctx.moveTo(x+cellSize,y);ctx.lineTo(x+cellSize,y+cellSize);ctx.stroke();}
-                }
-                ctx.restore();
-            }
-
-            // THERMO — tubes + bulbs
-            if (variant === 'thermo' && variantData.thermos) {
-                ctx.save();
-                for (const thermo of variantData.thermos) {
-                    // Tube
-                    ctx.strokeStyle = 'rgba(190,190,190,0.38)';
-                    ctx.lineWidth = cellSize*0.32; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-                    ctx.beginPath();
-                    for (let i=0;i<thermo.length;i++) {
-                        const [r,c]=thermo[i], x=c*cellSize+cellSize/2, y=r*cellSize+cellSize/2;
-                        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-                    }
-                    ctx.stroke();
-                    // Bulb
-                    const [br,bc]=thermo[0];
-                    ctx.fillStyle='rgba(190,190,190,0.5)';
-                    ctx.beginPath();
-                    ctx.arc(bc*cellSize+cellSize/2, br*cellSize+cellSize/2, cellSize*0.3, 0, Math.PI*2);
-                    ctx.fill();
-                }
-                ctx.restore();
-            }
-
-            // CONSECUTIVE — white bars between marked adjacent pairs
-            if (variant === 'consecutive' && variantData.consecutivePairs) {
-                ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.7)';
-                for (const p of variantData.consecutivePairs) {
-                    const mx=((p.c1+p.c2)/2+0.5)*cellSize, my=((p.r1+p.r2)/2+0.5)*cellSize;
-                    const bw = p.r1===p.r2 ? 4 : cellSize*0.5;
-                    const bh = p.r1===p.r2 ? cellSize*0.5 : 4;
-                    ctx.fillRect(mx-bw/2, my-bh/2, bw, bh);
-                }
-                ctx.restore();
-            }
-
-            // ARROW — lines from circle + arrowhead
-            if (variant === 'arrow' && variantData.arrows) {
-                ctx.save();
-                for (const arrow of variantData.arrows) {
-                    const [cr,cc]=arrow.circle;
-                    // Arrow shaft
-                    ctx.strokeStyle='rgba(180,180,180,0.48)';
-                    ctx.lineWidth=cellSize*0.11; ctx.lineCap='round';
-                    ctx.beginPath();
-                    ctx.moveTo(cc*cellSize+cellSize/2, cr*cellSize+cellSize/2);
-                    for (const [r,c] of arrow.cells) ctx.lineTo(c*cellSize+cellSize/2, r*cellSize+cellSize/2);
-                    ctx.stroke();
-                    // Circle
-                    ctx.strokeStyle='rgba(180,180,180,0.6)'; ctx.lineWidth=1.5;
-                    ctx.beginPath();
-                    ctx.arc(cc*cellSize+cellSize/2, cr*cellSize+cellSize/2, cellSize*0.34, 0, Math.PI*2);
-                    ctx.stroke();
-                    // Arrowhead at end
-                    const last=arrow.cells[arrow.cells.length-1];
-                    const prev=arrow.cells.length>1?arrow.cells[arrow.cells.length-2]:arrow.circle;
-                    const angle=Math.atan2(last[0]-prev[0], last[1]-prev[1]);
-                    const ax=last[1]*cellSize+cellSize/2, ay=last[0]*cellSize+cellSize/2;
-                    ctx.fillStyle='rgba(180,180,180,0.55)';
-                    ctx.beginPath();
-                    ctx.moveTo(ax+Math.cos(angle)*cellSize*0.2, ay+Math.sin(angle)*cellSize*0.2);
-                    ctx.lineTo(ax+Math.cos(angle-2.5)*cellSize*0.13, ay+Math.sin(angle-2.5)*cellSize*0.13);
-                    ctx.lineTo(ax+Math.cos(angle+2.5)*cellSize*0.13, ay+Math.sin(angle+2.5)*cellSize*0.13);
-                    ctx.closePath(); ctx.fill();
-                }
-                ctx.restore();
-            }
-
-            // EVEN-ODD — circle = even cells, square = odd cells
-            if (variant === 'evenodd' && variantData.evenOddMask) {
-                ctx.save();
-                for (let r=0;r<9;r++) for (let c=0;c<9;c++) {
-                    const m=variantData.evenOddMask[r][c]; if(!m) continue;
-                    const x=c*cellSize, y=r*cellSize, p=cellSize*0.1;
-                    ctx.fillStyle='rgba(140,140,160,0.22)';
-                    if (m==='even') {
-                        ctx.beginPath();
-                        ctx.arc(x+cellSize/2, y+cellSize/2, cellSize*0.38, 0, Math.PI*2);
-                        ctx.fill();
-                    } else {
-                        ctx.fillRect(x+p, y+p, cellSize-p*2, cellSize-p*2);
-                    }
-                }
-                ctx.restore();
-            }
 
 
