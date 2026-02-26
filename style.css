@@ -3326,3 +3326,67 @@ select.setting-input option { background: var(--bg) !important; color: var(--tex
     border-radius: var(--radius-sm) !important;
 }
 
+
+/* ── Landscape / Tablet layout ─────────────────────────── */
+@media (orientation: landscape) and (max-height: 500px) {
+    /* Game screen — side-by-side layout */
+    #game-screen {
+        flex-direction: row !important;
+        flex-wrap: wrap;
+    }
+    .player-bar.top { order: 0; width: 100%; flex: 0 0 auto; }
+    .board-container { flex: 1 1 auto; padding: 4px !important; }
+    .bottom-bar {
+        width: 180px;
+        flex: 0 0 180px;
+        border-top: none !important;
+        border-left: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+    }
+    .tools-strip { flex-wrap: wrap; height: auto; }
+    .permanent-number-pad {
+        grid-template-columns: repeat(3, 1fr) !important;
+        flex: 1;
+        align-content: start;
+    }
+}
+
+@media (orientation: landscape) and (min-height: 500px) and (max-width: 900px) {
+    .board-container { padding: 4px !important; }
+    #sudoku-canvas { max-height: 80vmin !important; }
+}
+
+@media (min-width: 768px) {
+    /* Tablet portrait — wider board */
+    .board-container { padding: 20px !important; }
+    #sudoku-canvas { max-width: min(70vw, 70vh) !important; }
+    .permanent-number-pad { max-width: min(70vw, 70vh); margin: 0 auto; }
+    .main-content { max-width: 680px; }
+    .modal { max-width: 420px; }
+}
+
+/* ── Streak pop animation ──────────────────────────────── */
+@keyframes streakPop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.35); }
+    70%  { transform: scale(0.92); }
+    100% { transform: scale(1); }
+}
+.streak-badge.streak-pop { animation: streakPop 0.55s cubic-bezier(.36,.07,.19,.97); }
+
+/* ── Hint button badge ─────────────────────────────────── */
+.tool-btn-hint { position: relative; }
+.hint-count {
+    position: absolute;
+    top: -3px; right: -3px;
+    min-width: 14px; height: 14px;
+    background: var(--accent-orange);
+    color: var(--bg-primary);
+    font-size: 0.55rem;
+    font-weight: 800;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 2px;
+    pointer-events: none;
+}

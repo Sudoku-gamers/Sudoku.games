@@ -165,6 +165,7 @@
             maxWrongMoves: 3,       // 3 strikes
             errorCell: null,        // { row, col, startTime } for red flash
             highlightNumber: null,  // number to highlight across the board
+            hintsUsed: 0,           // count hints used this game
             floatingScores: [],     // [{x, y, text, startTime, color}] DOM animations
         };
 
@@ -179,7 +180,8 @@
                 username: 'Player',
                 soundEnabled: true,
                 animationsEnabled: true,
-                boardTheme: 'classic'
+                boardTheme: 'classic',
+                colorBlind: false
             },
             profile: {
                 rating: CONFIG.STARTING_RATING,
@@ -191,7 +193,8 @@
                 currentStreak: 0,
                 totalTimePlayed: 0
             },
-            history: []
+            history: [],
+            soloStats: { easy:{}, medium:{}, hard:{}, extreme:{} }
         };
 
         function loadPlayerData() {
@@ -204,8 +207,9 @@
                     playerData = {
                         ...playerData,
                         ...parsed,
-                        settings: { ...playerData.settings, ...(parsed.settings || {}) },
-                        profile:  { ...playerData.profile,  ...(parsed.profile  || {}) },
+                        settings:   { ...playerData.settings,   ...(parsed.settings   || {}) },
+                        profile:    { ...playerData.profile,     ...(parsed.profile    || {}) },
+                        soloStats:  { ...playerData.soloStats,   ...(parsed.soloStats  || {}) },
                     };
                     playerRating = playerData.profile.rating;
                 } catch (e) {
@@ -306,6 +310,7 @@
             updateToggle('animations-toggle', playerData.settings.animationsEnabled);
             const themeSelect = document.getElementById('theme-select');
             if (themeSelect) themeSelect.value = playerData.settings.boardTheme || 'classic';
+            updateToggle('colorblind-toggle', playerData.settings.colorBlind || false);
         }
 
         // Render own avatar (image or initials fallback)
@@ -412,6 +417,14 @@
                 playerData.profile.currentStreak++;
                 if (playerData.profile.currentStreak > playerData.profile.bestStreak)
                     playerData.profile.bestStreak = playerData.profile.currentStreak;
+                // Animate streak badge on increment
+                setTimeout(() => {
+                    const badge = document.querySelector('.streak-badge');
+                    if (badge) {
+                        badge.classList.add('streak-pop');
+                        setTimeout(() => badge.classList.remove('streak-pop'), 600);
+                    }
+                }, 700);
             } else if (result === 'loss') {
                 playerData.profile.losses++;
                 playerData.profile.currentStreak = 0;
@@ -1115,6 +1128,11 @@
             // Sound toggle
             document.getElementById('sound-toggle').addEventListener('click', function() {
                 this.classList.toggle('active');
+                playerData.settings.colorBlind = this.classList.contains('active');
+                savePlayerData();
+            });
+            document.getElementById('colorblind-toggle').addEventListener('click', function() {
+                this.classList.toggle('active');
                 playerData.settings.soundEnabled = this.classList.contains('active');
                 savePlayerData();
             });
@@ -1193,6 +1211,36 @@
                 }
             });
 
+            document.getElementById('hint-btn').addEventListener('click', function() {
+                if (!gameState.isRunning) return;
+                const N = gameState.gridSize || 9;
+                const maxHints = { easy: 5, medium: 3, hard: 1, extreme: 0 }[gameState.difficulty] ?? 3;
+                if (gameState.hintsUsed >= maxHints) {
+                    showToast(`No hints left (${maxHints} max on ${gameState.difficulty})`, 2200);
+                    return;
+                }
+                // Find a random empty cell and reveal its solution value
+                const emptyCells = [];
+                for (let r = 0; r < N; r++)
+                    for (let c = 0; c < N; c++)
+                        if (gameState.claims[r][c] === 0 && gameState.puzzle[r][c] === 0)
+                            emptyCells.push([r, c]);
+                if (emptyCells.length === 0) return;
+                const [hr, hc] = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                const val = gameState.solution[hr][hc];
+                gameState.puzzle[hr][hc] = val;
+                gameState.claims[hr][hc] = 1;
+                gameState.scores.p1++;
+                gameState.hintsUsed++;
+                updateHintDisplay();
+                updateRemainingCounts();
+            updateHintDisplay();
+                updateScores();
+                drawGrid();
+                checkGameEnd();
+                showToast(`💡 Hint used (${gameState.hintsUsed}/${maxHints})`, 1800);
+            });
+
             // Number pad buttons
             document.querySelectorAll('.num-pad-btn[data-num]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1240,6 +1288,21 @@
                         btn.classList.remove('disabled');
                     }
                 }
+            }
+        }
+
+        function updateHintDisplay() {
+            const N = gameState.gridSize || 9;
+            const maxHints = { easy: 5, medium: 3, hard: 1, extreme: 0 }[gameState.difficulty] ?? 3;
+            const remaining = Math.max(0, maxHints - (gameState.hintsUsed || 0));
+            const el = document.getElementById('hint-count');
+            const btn = document.getElementById('hint-btn');
+            if (el) el.textContent = remaining;
+            if (btn) {
+                btn.style.opacity = remaining === 0 ? '0.3' : '1';
+                btn.title = remaining === 0
+                    ? `No hints left on ${gameState.difficulty}`
+                    : `Hint — reveal one cell (${remaining} left)`;
             }
         }
 
@@ -1354,6 +1417,14 @@
             });
 
             // Variant pills
+            // Ensure variant description is prominent
+            const descEl = document.getElementById('variant-desc');
+            if (descEl) {
+                descEl.style.fontWeight = '500';
+                descEl.style.color = 'var(--text-primary)';
+                descEl.style.padding = '6px 4px';
+                descEl.style.minHeight = '2.4em';
+            }
             const VARIANT_DESCS = {
                 classic:    'Standard 9×9 Sudoku — rows, columns and boxes each contain 1–9.',
                 killer:     'Cages must sum to the shown total. No digit repeats within a cage.',
@@ -1998,17 +2069,18 @@
                         bgColor = currentTheme.light;
                     }
                     
+                    const cbMode = playerData.settings.colorBlind || false;
                     // Apply claim tint
                     if (claim === -1) {
                         bgColor = currentTheme.prefilled;
                     } else if (claim === 1) {
-                        bgColor = useCheckerboard
-                            ? 'rgba(74,158,255,0.45)'
-                            : (currentTheme === CONFIG.THEMES.night ? 'rgba(74,158,255,0.2)' : 'rgba(74,158,255,0.18)');
+                        bgColor = cbMode ? 'rgba(0,100,255,0.22)' :
+                            (useCheckerboard ? 'rgba(74,158,255,0.45)' :
+                            (currentTheme === CONFIG.THEMES.night ? 'rgba(74,158,255,0.2)' : 'rgba(74,158,255,0.18)'));
                     } else if (claim === 2) {
-                        bgColor = useCheckerboard
-                            ? 'rgba(255,140,74,0.45)'
-                            : (currentTheme === CONFIG.THEMES.night ? 'rgba(255,140,74,0.2)' : 'rgba(255,140,74,0.18)');
+                        bgColor = cbMode ? 'rgba(220,120,0,0.22)' :
+                            (useCheckerboard ? 'rgba(255,140,74,0.45)' :
+                            (currentTheme === CONFIG.THEMES.night ? 'rgba(255,140,74,0.2)' : 'rgba(255,140,74,0.18)'));
                     }
                     
                     // Animation
@@ -2040,6 +2112,25 @@
                         );
                     } else {
                         ctx.fillRect(x, y, cellSize, cellSize);
+                    }
+
+                    // Colour-blind shape overlay: P1=circle corner, P2=diagonal lines
+                    if (cbMode && (claim === 1 || claim === 2)) {
+                        ctx.save();
+                        ctx.globalAlpha = 0.18;
+                        ctx.fillStyle = claim === 1 ? '#0064ff' : '#dc7800';
+                        if (claim === 1) {
+                            // P1 — small circle in top-right corner
+                            ctx.beginPath();
+                            ctx.arc(x + cellSize*0.78, y + cellSize*0.22, cellSize*0.14, 0, Math.PI*2);
+                            ctx.fill();
+                        } else {
+                            // P2 — small square in bottom-left corner
+                            const sq = cellSize * 0.22;
+                            ctx.fillRect(x + cellSize*0.08, y + cellSize*0.70, sq, sq);
+                        }
+                        ctx.globalAlpha = 1;
+                        ctx.restore();
                     }
 
                     // Row/col/box highlight zone (subtle tint)
@@ -2115,8 +2206,13 @@
                         ctx.textBaseline = 'middle';
                         
                         // Given-cell text colour can be overridden by theme
-                        const givenCol  = currentTheme.prefilledText || '#1a1a1a';
-                        const p1Col     = currentTheme.playerText    || '#003d80';
+                        // Given-cell colour: from theme, else dark for light themes, light for dark
+                        const isDarkTheme = (currentTheme.dark === '#1a1a1a' ||
+                                            currentTheme.bgFill === '#161830');
+                        const givenCol  = currentTheme.prefilledText ||
+                                          (isDarkTheme ? '#e8e8e8' : '#1a1a1a');
+                        const p1Col     = currentTheme.playerText    ||
+                                          (isDarkTheme ? '#64b5f6' : '#003d80');
                         if (claim === -1) {
                             ctx.fillStyle = givenCol;
                         } else if (claim === 1) {
@@ -2799,21 +2895,63 @@
             }
             
             if (gameState.gameMode === 'solo') {
-                const solved = reason === 'solved'; // full board completed
+                const solved = reason === 'solved';
                 const elapsed = Math.round(gameState.dojoElapsed || 0);
                 const mins = Math.floor(elapsed / 60), secs = elapsed % 60;
                 const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
                 icon.textContent = solved ? '🎉' : '🤔';
-                title.textContent = solved ? 'Puzzle Complete!' : 'Keep Trying!';
-                subtitle.textContent = solved
-                    ? `Solved in ${timeStr} · ${gameState.scores.p1} cells`
-                    : `You placed ${gameState.scores.p1} cells so far`;
+                title.textContent = solved ? 'Puzzle Complete!' : 'Keep Going!';
+
+                // Update best time
+                const diff = gameState.difficulty || 'medium';
+                let bestTimeStr = '—';
+                if (solved) {
+                    const prev = (playerData.soloStats[diff] || {});
+                    const prevBest = prev.bestTime;
+                    const isNewBest = !prevBest || elapsed < prevBest;
+                    playerData.soloStats[diff] = {
+                        ...(playerData.soloStats[diff] || {}),
+                        bestTime: isNewBest ? elapsed : prevBest,
+                        gamesPlayed: (prev.gamesPlayed || 0) + 1,
+                    };
+                    savePlayerData();
+                    if (isNewBest && prevBest) bestTimeStr = `🏅 New best! (was ${Math.floor(prevBest/60)}m ${prevBest%60}s)`;
+                    else if (isNewBest) bestTimeStr = '🏅 First solve!';
+                    else {
+                        const pb = playerData.soloStats[diff].bestTime;
+                        bestTimeStr = `Best: ${Math.floor(pb/60)}m ${pb%60}s`;
+                    }
+                }
+
+                const maxHints = { easy: 5, medium: 3, hard: 1, extreme: 0 }[diff] ?? 3;
+                const hintsLeft = maxHints - (gameState.hintsUsed || 0);
+
+                subtitle.textContent = solved ? `Solved in ${timeStr}` : `Time elapsed: ${timeStr}`;
+
+                // Inject rich stats row into result modal body
+                const pvpEl = document.getElementById('pvp-summary-stats');
+                if (pvpEl) pvpEl.style.display = 'none';
+                const statsEl = document.getElementById('solo-summary-stats');
+                if (statsEl) {
+                    statsEl.style.display = 'grid';
+                    document.getElementById('sum-time').textContent    = timeStr;
+                    document.getElementById('sum-mistakes').textContent = gameState.wrongMoves ?? 0;
+                    document.getElementById('sum-hints').textContent   = gameState.hintsUsed || 0;
+                    document.getElementById('sum-best').textContent    = bestTimeStr;
+                }
+
                 ratingChangeEl.parentElement.style.display = 'none';
-                // Award dojo XP on full solve
                 if (gameState.dojoTechniqueId && solved) {
                     completeDojoPuzzle();
                 }
-            } else if (winner === 1) {
+            } else {
+                // PvP mode — show cell grid, hide solo summary
+                const sEl = document.getElementById('solo-summary-stats');
+                const pEl = document.getElementById('pvp-summary-stats');
+                if (sEl) sEl.style.display = 'none';
+                if (pEl) pEl.style.display = 'grid';
+            }
+            if (false && winner === 1) {
                 icon.textContent = '🏆';
                 title.textContent = 'You Win!';
                 subtitle.textContent = reason === 'resign' ? 'Opponent resigned' :
@@ -2966,26 +3104,20 @@
             return grid;
         }
 
-        function solve16(grid, N, BS) {
-            const empty = find16Empty(grid, N);
-            if (!empty) return true;
-            const [row, col] = empty;
-            const nums = Array.from({length:N},(_,i)=>i+1); shuffle(nums);
-            for (const num of nums) {
-                if (valid16(grid, row, col, num, N, BS)) {
-                    grid[row][col] = num;
-                    if (solve16(grid, N, BS)) return true;
-                    grid[row][col] = 0;
-                }
-            }
-            return false;
-        }
-
-        function find16Empty(grid, N) {
+        // ── 16×16 fast bitmask solver ─────────────────────────────
+        // rowMask[r], colMask[c], boxMask[b] each have bit i set if value i+1 is used.
+        function buildMasks16(grid, N, BS) {
+            const rm = new Int32Array(N), cm = new Int32Array(N), bm = new Int32Array(N);
             for (let r = 0; r < N; r++)
-                for (let c = 0; c < N; c++)
-                    if (grid[r][c] === 0) return [r, c];
-            return null;
+                for (let c = 0; c < N; c++) {
+                    const v = grid[r][c];
+                    if (v) {
+                        const bit = 1 << (v - 1);
+                        rm[r] |= bit; cm[c] |= bit;
+                        bm[Math.floor(r/BS)*BS + Math.floor(c/BS)] |= bit;
+                    }
+                }
+            return { rm, cm, bm };
         }
 
         function valid16(grid, row, col, num, N, BS) {
@@ -2998,17 +3130,78 @@
             return true;
         }
 
-        function countSolutions16(grid, limit, N, BS) {
-            const empty = find16Empty(grid, N);
-            if (!empty) return 1;
-            const [row, col] = empty;
-            let count = 0;
-            for (let num = 1; num <= N; num++) {
-                if (!valid16(grid, row, col, num, N, BS)) continue;
+        function find16Empty(grid, N) {
+            for (let r = 0; r < N; r++)
+                for (let c = 0; c < N; c++)
+                    if (grid[r][c] === 0) return [r, c];
+            return null;
+        }
+
+        // MRV: pick the empty cell with fewest legal values
+        function findMRV16(grid, N, BS, rm, cm, bm) {
+            let bestR=-1, bestC=-1, bestCount=N+1;
+            const full = (1<<N)-1;
+            for (let r=0; r<N; r++) for (let c=0; c<N; c++) {
+                if (grid[r][c] !== 0) continue;
+                const b = Math.floor(r/BS)*BS + Math.floor(c/BS);
+                const used = rm[r] | cm[c] | bm[b];
+                const avail = full & ~used;
+                const count = avail === 0 ? 0 : avail.toString(2).split('').filter(x=>x==='1').length;
+                if (count < bestCount) { bestCount=count; bestR=r; bestC=c;
+                    if (count === 0) return [r, c, 0]; // dead end early exit
+                }
+            }
+            return bestR === -1 ? null : [bestR, bestC, bestCount];
+        }
+
+        function solve16(grid, N, BS) {
+            const { rm, cm, bm } = buildMasks16(grid, N, BS);
+            return _solve16Mask(grid, N, BS, rm, cm, bm);
+        }
+
+        function _solve16Mask(grid, N, BS, rm, cm, bm) {
+            const mrv = findMRV16(grid, N, BS, rm, cm, bm);
+            if (!mrv) return true; // no empty cells
+            const [row, col, avail] = mrv;
+            if (avail === 0) return false; // dead end
+            const b = Math.floor(row/BS)*BS + Math.floor(col/BS);
+            const full = (1<<N)-1;
+            let bits = full & ~(rm[row] | cm[col] | bm[b]);
+            while (bits) {
+                const lsb  = bits & (-bits);
+                bits &= bits-1;
+                const num  = Math.log2(lsb) + 1;
                 grid[row][col] = num;
-                count += countSolutions16(grid, limit - count, N, BS);
+                rm[row] |= lsb; cm[col] |= lsb; bm[b] |= lsb;
+                if (_solve16Mask(grid, N, BS, rm, cm, bm)) return true;
                 grid[row][col] = 0;
-                if (count >= limit) break;
+                rm[row] ^= lsb; cm[col] ^= lsb; bm[b] ^= lsb;
+            }
+            return false;
+        }
+
+        function countSolutions16(grid, limit, N, BS) {
+            const { rm, cm, bm } = buildMasks16(grid, N, BS);
+            return _count16(grid, limit, N, BS, rm, cm, bm);
+        }
+
+        function _count16(grid, limit, N, BS, rm, cm, bm) {
+            const mrv = findMRV16(grid, N, BS, rm, cm, bm);
+            if (!mrv) return 1;
+            const [row, col, avail] = mrv;
+            if (avail === 0) return 0;
+            const b = Math.floor(row/BS)*BS + Math.floor(col/BS);
+            const full = (1<<N)-1;
+            let bits = full & ~(rm[row] | cm[col] | bm[b]);
+            let count = 0;
+            while (bits && count < limit) {
+                const lsb = bits & (-bits); bits &= bits-1;
+                const num = Math.log2(lsb) + 1;
+                grid[row][col] = num;
+                rm[row]|=lsb; cm[col]|=lsb; bm[b]|=lsb;
+                count += _count16(grid, limit-count, N, BS, rm, cm, bm);
+                grid[row][col] = 0;
+                rm[row]^=lsb; cm[col]^=lsb; bm[b]^=lsb;
             }
             return count;
         }
@@ -3068,6 +3261,7 @@
             gameState.animatingCells.clear();
             gameState.lastTick      = Date.now();
             gameState.wrongMoves    = 0;
+            gameState.hintsUsed     = 0;
             gameState.errorCell     = null;
             gameState.highlightNumber = null;
             gameState.floatingScores  = [];

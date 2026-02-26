@@ -375,6 +375,15 @@ create policy "public rw" on sudoku_rooms
                 </div>
                 <div class="setting-item">
                     <div class="setting-info">
+                        <div class="setting-label">Colour-Blind Mode</div>
+                        <div class="setting-desc">Use shapes instead of colours to distinguish players</div>
+                    </div>
+                    <div class="toggle-switch" id="colorblind-toggle">
+                        <div class="toggle-slider"></div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
                         <div class="setting-label">Sound Effects</div>
                         <div class="setting-desc">Play sounds during game</div>
                     </div>
@@ -676,6 +685,7 @@ create policy "public rw" on sudoku_rooms
                 <div class="errors-badge">
                     <span id="wrong-moves-display" title="Wrong moves — 3 = lose a point">○○○</span>
                 </div>
+                <button class="tool-btn tool-btn-hint" id="hint-btn" title="Hint (reveals one safe cell)">💡<span class="hint-count" id="hint-count">3</span></button>
                 <button class="tool-btn tool-btn-resign" id="resign-btn" title="Resign">🏳</button>
                 <button class="tool-btn tool-btn-new" id="new-game-btn" title="New Game">↺</button>
             </div>
@@ -783,7 +793,26 @@ create policy "public rw" on sudoku_rooms
                 <div class="modal-subtitle" id="result-subtitle">Most cells claimed</div>
             </div>
             <div class="modal-body">
-                <div class="result-stats">
+                <!-- Solo summary grid (hidden in PvP mode) -->
+                <div class="result-stats" id="solo-summary-stats" style="display:none;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div class="result-stat" style="border-color:var(--border-color);">
+                        <div class="result-stat-value" id="sum-time" style="font-size:1.2rem;">—</div>
+                        <div class="result-stat-label">Time</div>
+                    </div>
+                    <div class="result-stat" style="border-color:var(--border-color);">
+                        <div class="result-stat-value" id="sum-mistakes" style="font-size:1.2rem;">0</div>
+                        <div class="result-stat-label">Mistakes</div>
+                    </div>
+                    <div class="result-stat" style="border-color:var(--border-color);">
+                        <div class="result-stat-value" id="sum-hints" style="font-size:1.2rem;">0</div>
+                        <div class="result-stat-label">Hints Used</div>
+                    </div>
+                    <div class="result-stat" style="border-color:var(--border-color);grid-column:1/-1;">
+                        <div class="result-stat-value" id="sum-best" style="font-size:0.9rem;color:var(--accent-orange);">—</div>
+                        <div class="result-stat-label">Personal Best</div>
+                    </div>
+                </div>
+                <div class="result-stats" id="pvp-summary-stats">
                     <div class="result-stat p1">
                         <div class="result-stat-value" id="p1-final-score">0</div>
                         <div class="result-stat-label">Your Cells</div>
@@ -793,6 +822,7 @@ create policy "public rw" on sudoku_rooms
                         <div class="result-stat-label">Opponent</div>
                     </div>
                 </div>
+                </div><!-- /pvp-summary-stats -->
                 <div class="rating-display">
                     <div class="rating-change" id="rating-change">
                         <span id="old-rating">2.0</span> → <span id="new-rating">2.1</span>
