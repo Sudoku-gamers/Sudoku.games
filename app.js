@@ -2950,27 +2950,26 @@
                 const pEl = document.getElementById('pvp-summary-stats');
                 if (sEl) sEl.style.display = 'none';
                 if (pEl) pEl.style.display = 'grid';
-            }
-            if (false && winner === 1) {
-                icon.textContent = '🏆';
-                title.textContent = 'You Win!';
-                subtitle.textContent = reason === 'resign' ? 'Opponent resigned' :
-                                      reason === 'timeout' ? 'Opponent ran out of time' :
-                                      reason === 'time' ? 'More time remaining' :
-                                      'Most cells claimed';
-                ratingChangeEl.parentElement.style.display = 'block';
-            } else if (winner === 2) {
-                icon.textContent = '😔';
-                title.textContent = 'You Lose';
-                subtitle.textContent = reason === 'resign' ? 'You resigned' :
-                                      reason === 'timeout' ? 'You ran out of time' :
-                                      reason === 'time' ? 'Opponent had more time' :
-                                      'Opponent claimed more cells';
-                ratingChangeEl.parentElement.style.display = 'block';
-            } else {
-                icon.textContent = '🤝';
-                title.textContent = 'Draw!';
-                subtitle.textContent = 'Equal cells claimed';
+
+                if (winner === 1) {
+                    icon.textContent = '🏆';
+                    title.textContent = 'You Win!';
+                    subtitle.textContent = reason === 'resign'  ? 'Opponent resigned' :
+                                          reason === 'timeout' ? 'Opponent ran out of time' :
+                                          reason === 'time'    ? 'More time remaining' :
+                                          'Most cells claimed';
+                } else if (winner === 2) {
+                    icon.textContent = '😔';
+                    title.textContent = 'You Lose';
+                    subtitle.textContent = reason === 'resign'  ? 'You resigned' :
+                                          reason === 'timeout' ? 'You ran out of time' :
+                                          reason === 'time'    ? 'Opponent had more time' :
+                                          'Opponent claimed more cells';
+                } else {
+                    icon.textContent = '🤝';
+                    title.textContent = 'Draw!';
+                    subtitle.textContent = 'Equal cells claimed';
+                }
                 ratingChangeEl.parentElement.style.display = 'block';
             }
             
