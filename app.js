@@ -161,7 +161,8 @@
             inputMode: 'pen',  // 'pen' or 'pencil'
             animatingCells: new Map(),
             lastTick: 0,
-            wrongMoves: 0,          // penalty counter
+            wrongMoves: 0,          // penalty counter (resets after 3)
+            totalWrongMoves: 0,     // cumulative total mistakes this game
             maxWrongMoves: 3,       // 3 strikes
             errorCell: null,        // { row, col, startTime } for red flash
             highlightNumber: null,  // number to highlight across the board
@@ -1697,6 +1698,7 @@
             gameState.p2Time = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
             gameState.dojoElapsed = 0;
             gameState.scores = { p1: 0, p2: 0 };
+            gameState.totalWrongMoves = 0;
             _lastCorrectMoveTime = Date.now();
             gameState.currentPlayer = 1;
             gameState.isRunning = true;
@@ -1792,6 +1794,7 @@
                     aiDifficulty:  gameState.aiDifficulty,
                     difficulty:    gameState.difficulty,
                     wrongMoves:    gameState.wrongMoves,
+                    totalWrongMoves: gameState.totalWrongMoves || 0,
                     savedAt:       Date.now(),
                     onlineRoomId:  onlineState.roomId,
                     onlineSlot:    onlineState.playerSlot,
@@ -1843,6 +1846,7 @@
             gameState.aiDifficulty = s.aiDifficulty;
             gameState.difficulty   = s.difficulty;
             gameState.wrongMoves   = s.wrongMoves;
+            gameState.totalWrongMoves = s.totalWrongMoves || 0;
             gameState.isRunning    = true;
             gameState.isPaused     = false;
             gameState.selectedCell = null;
@@ -2086,6 +2090,21 @@
             if (p1El) {
                 if (gameState.gameMode === 'solo') {
                     p1El.textContent = 'Score: ' + fmt(gameState.scores.p1);
+                    // Apply clean pill styling once
+                    if (!p1El._styled) {
+                        Object.assign(p1El.style, {
+                            background: 'linear-gradient(135deg, #1a2035 0%, #0f1628 100%)',
+                            border: '1px solid rgba(74,158,255,0.35)',
+                            borderRadius: '20px',
+                            padding: '6px 18px',
+                            fontWeight: '700',
+                            fontSize: '1rem',
+                            color: '#4a9eff',
+                            letterSpacing: '0.3px',
+                            boxShadow: '0 2px 8px rgba(74,158,255,0.15)',
+                        });
+                        p1El._styled = true;
+                    }
                 } else {
                     p1El.textContent = fmt(gameState.scores.p1);
                 }
@@ -2344,8 +2363,8 @@
                     } else if (gameState.pencilMarks && gameState.pencilMarks[row] && gameState.pencilMarks[row][col] && gameState.pencilMarks[row][col].size > 0) {
                         // Draw pencil marks in a 3x3 grid
                         const pencilMarks = Array.from(gameState.pencilMarks[row][col]).sort();
-                        ctx.font = `${cellSize * 0.25}px -apple-system, sans-serif`;
-                        ctx.fillStyle = '#777';
+                        ctx.font = `bold ${cellSize * 0.27}px -apple-system, sans-serif`;
+                        ctx.fillStyle = '#888';
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         
@@ -2646,6 +2665,7 @@
             if (gameState.solution[row][col] !== number) {
                 // Register wrong move
                 gameState.wrongMoves++;
+                gameState.totalWrongMoves++;
                 gameState.errorCell = { row, col, startTime: Date.now() };
 
                 // Penalty: lose 10 seconds of time (not applicable in untimed solo mode)
@@ -2755,7 +2775,13 @@
         function showPenaltyToast(seconds) {
             let toast = document.getElementById('penalty-toast');
             if (!toast) return;
-            toast.textContent = `⚠ Wrong move! −${seconds}s`;
+            // In solo mode (no time limit) show a points-based message
+            if (gameState.gameMode === 'solo') {
+                const isFinalPenalty = gameState.wrongMoves >= gameState.maxWrongMoves;
+                toast.textContent = isFinalPenalty ? '⚠ 3 mistakes! −500 pts' : `⚠ Wrong move! (${gameState.wrongMoves}/${gameState.maxWrongMoves})`;
+            } else {
+                toast.textContent = `⚠ Wrong move! −${seconds}s`;
+            }
             toast.classList.remove('show');
             void toast.offsetWidth;
             toast.classList.add('show');
@@ -3081,7 +3107,7 @@
                         <div class="result-stat-label">Time</div>
                     </div>
                     <div class="result-stat" style="border-color:var(--border-color);">
-                        <div class="result-stat-value" style="font-size:1.3rem;">${gameState.wrongMoves ?? 0}</div>
+                        <div class="result-stat-value" style="font-size:1.3rem;">${gameState.totalWrongMoves ?? 0}</div>
                         <div class="result-stat-label">Mistakes</div>
                     </div>
                     <div class="result-stat" style="border-color:var(--border-color);">
@@ -3434,6 +3460,7 @@
             gameState.timeRemaining = Infinity;
             gameState.dojoElapsed   = 0;
             gameState.scores        = { p1: 0, p2: 0 };
+            gameState.totalWrongMoves = 0;
             _lastCorrectMoveTime    = Date.now();
             gameState.currentPlayer = 1;
             gameState.isRunning     = true;
@@ -3444,6 +3471,7 @@
             gameState.lastTick      = Date.now();
             _lastTimerStr = { p1: '', p2: '' };
             gameState.wrongMoves    = 0;
+            gameState.totalWrongMoves = 0;
             gameState.hintsUsed     = 0;
             gameState.errorCell     = null;
             gameState.highlightNumber = null;
