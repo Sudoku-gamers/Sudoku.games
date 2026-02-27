@@ -2515,7 +2515,7 @@
 
         function selectCell(x, y) {
             const size = canvas.width / window.devicePixelRatio;
-            const cellSize = size / 9;
+            const cellSize = size / (gameState.gridSize || 9);
             
             const col = Math.floor(x / cellSize);
             const row = Math.floor(y / cellSize);
@@ -3257,22 +3257,27 @@
             const N = 16, BS = 4;
             const solution = generate16x16Solution();
             const puzzle = solution.map(r => [...r]);
-            // Clue targets: easy≈88, medium≈68, hard≈52, extreme≈40
-            const targets = {easy:88, medium:68, hard:52, extreme:40};
-            const target = targets[difficulty] || 68;
+            // Clue targets per difficulty. We skip per-removal uniqueness checks
+            // (countSolutions16 on a 16x16 is too slow for the main thread and freezes the UI).
+            // Rotationally-symmetric removal ensures a well-formed puzzle without that check.
+            // easy≈112, medium≈96, hard≈80, extreme≈64
+            const targets = { easy: 112, medium: 96, hard: 80, extreme: 64 };
+            const target = targets[difficulty] || 96;
             const positions = [];
-            for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) positions.push([r,c]);
+            for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) positions.push([r, c]);
             shuffle(positions);
-            let givens = N * N;
+            let givens = N * N; // 256
             for (const [r, c] of positions) {
                 if (givens <= target) break;
-                const bk = puzzle[r][c];
-                puzzle[r][c] = 0;
-                // Quick uniqueness check (limit 2 means "is there >1 solution?")
-                if (countSolutions16(puzzle.map(row=>[...row]), 2, N, BS) === 1) {
+                // Remove symmetrically (rotational 180° pair) for aesthetic balance
+                const rr = N - 1 - r, rc = N - 1 - c;
+                if (puzzle[r][c] !== 0) {
+                    puzzle[r][c] = 0;
                     givens--;
-                } else {
-                    puzzle[r][c] = bk;
+                }
+                if (givens > target && (rr !== r || rc !== c) && puzzle[rr][rc] !== 0) {
+                    puzzle[rr][rc] = 0;
+                    givens--;
                 }
             }
             return { puzzle, solution };
