@@ -1129,13 +1129,14 @@
             // Sound toggle
             document.getElementById('sound-toggle').addEventListener('click', function() {
                 this.classList.toggle('active');
-                playerData.settings.colorBlind = this.classList.contains('active');
+                playerData.settings.soundEnabled = this.classList.contains('active');
                 savePlayerData();
             });
             document.getElementById('colorblind-toggle').addEventListener('click', function() {
                 this.classList.toggle('active');
-                playerData.settings.soundEnabled = this.classList.contains('active');
+                playerData.settings.colorBlind = this.classList.contains('active');
                 savePlayerData();
+                if (gameState.isRunning) { markGridDirty(); drawGrid(); }
             });
             
             // Animations toggle
@@ -1235,7 +1236,6 @@
                 gameState.hintsUsed++;
                 updateHintDisplay();
                 updateRemainingCounts();
-            updateHintDisplay();
                 updateScores();
                 markGridDirty();
                 drawGrid();
@@ -1408,7 +1408,12 @@
                 card.addEventListener('click', () => {
                     document.querySelectorAll('.time-card').forEach(c => c.classList.remove('active'));
                     card.classList.add('active');
-                    gameState.timeLimit = parseInt(card.dataset.time) || 600;
+                    if (card.dataset.time === 'custom') {
+                        const mins = parseInt(prompt('Custom time limit (minutes):', '12'));
+                        gameState.timeLimit = (!isNaN(mins) && mins > 0) ? mins * 60 : 600;
+                    } else {
+                        gameState.timeLimit = parseInt(card.dataset.time) || 600;
+                    }
                 });
             });
 
@@ -1570,7 +1575,6 @@
             ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
             
             if (gameState.isRunning || gameState.claims.length > 0) {
-                markGridDirty();
                 markGridDirty(); drawGrid();
             }
         }
@@ -1637,10 +1641,12 @@
             gameState.animatingCells.clear();
             gameState.lastTick = Date.now();
             gameState.wrongMoves = 0;
-            gameState.errorCell = null;
+            gameState.hintsUsed  = 0;
+            gameState.errorCell  = null;
             gameState.highlightNumber = null;
-            gameState.floatingScores = [];
+            gameState.floatingScores  = [];
             updateWrongMovesDisplay();
+            updateHintDisplay();
             
             updateTimerDisplay();
             updateScores();
@@ -1661,25 +1667,20 @@
             }
 
             // Solo/dojo mode — hide opponent panel entirely
-            const p2Row = document.querySelector('.player-row.p2-row') || document.querySelector('[class*="p2"]')?.closest('.player-row');
-            const opponentPanel = document.getElementById('p2-panel') || document.querySelector('.opponent-panel');
+            const opponentBar = document.querySelector('.player-bar.top');
+            const turnIndicator = document.getElementById('turn-indicator');
             if (gameState.gameMode === 'solo') {
-                // Hide opponent display elements
-                document.querySelector('.player-row:first-child')?.style && 
-                    (document.querySelectorAll('.player-row')[0].style.display = 'none');
-                document.getElementById('turn-indicator') && 
-                    (document.getElementById('turn-indicator').style.display = 'none');
+                if (opponentBar)    opponentBar.style.display = 'none';
+                if (turnIndicator)  turnIndicator.style.display = 'none';
             } else {
-                document.querySelectorAll('.player-row').forEach(r => r.style.display = '');
-                const ti = document.getElementById('turn-indicator');
-                if (ti) ti.style.display = '';
+                if (opponentBar)    opponentBar.style.display = '';
+                if (turnIndicator)  turnIndicator.style.display = '';
             }
             
             lobby.style.display = 'none';
             gameScreen.classList.add('active');
             
             resizeCanvas();
-            _gridDirty = true;
             markGridDirty();
             drawGrid();
             updateRemainingCounts();
@@ -1816,7 +1817,6 @@
             lobby.style.display = 'none';
             gameScreen.classList.add('active');
             resizeCanvas();
-            _gridDirty = true;
             markGridDirty();
             drawGrid();
             updateRemainingCounts();
@@ -2540,7 +2540,6 @@
         function hideNumberPicker() {
             // Deprecated - keeping for compatibility
             gameState.selectedCell = null;
-            markGridDirty();
             markGridDirty(); drawGrid();
         }
 
@@ -2660,7 +2659,7 @@
 
         function spawnFloatingScore(row, col, text, color) {
             const size = canvas.width / window.devicePixelRatio;
-            const cellSize = size / 9;
+            const cellSize = size / (gameState.gridSize || 9);
             const rect = canvas.getBoundingClientRect();
             const x = rect.left + col * cellSize + cellSize / 2;
             const y = rect.top + row * cellSize + cellSize / 2;
@@ -2784,14 +2783,13 @@
                 gameState.scores.p2++;
             }
             
-            gameState.animatingCells.set(`${row},${col}`, {
+            gameState.animatingCells.set(row * 20 + col, {
                 startTime: Date.now(),
                 player: player
             });
             
             playSound('claim');
             updateScores();
-            markGridDirty();
             markGridDirty(); drawGrid();
         }
 
@@ -3309,7 +3307,6 @@
             gameState.lastMoveCell  = null;
             gameState.animatingCells.clear();
             gameState.lastTick      = Date.now();
-            _gridDirty = true;
             _lastTimerStr = { p1: '', p2: '' };
             gameState.wrongMoves    = 0;
             gameState.hintsUsed     = 0;
@@ -3321,6 +3318,7 @@
             rebuildNumberPad(16);
             updateTimerDisplay();
             updateScores();
+            updateHintDisplay();
 
             lobby.style.display = 'none';
             gameScreen.classList.add('active');
