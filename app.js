@@ -4129,6 +4129,9 @@
             navigator.clipboard.writeText(link).then(() => showToast('Link copied!', 1500));
         };
 
+        // Exposed on window — called from inline onclick in dynamically-built HTML strings
+        window.openTournamentDetail = function(tid) { openTournamentDetail(tid); };
+
         function initTournamentsPage() {
             const menuBtn = document.getElementById('tournaments-menu-btn');
             if (menuBtn) menuBtn.addEventListener('click', () => {
@@ -4375,9 +4378,9 @@
             document.getElementById('td-launch-btn').style.display =
                 (t.status === 'waiting' && isCreator && t.player_count >= (t.min_players || 2)) ? 'block' : 'none';
             document.getElementById('td-leave-btn').style.display =
-                (t.status === 'waiting' && isParticipant && !isCreator) ? 'block' : 'none';
+                (isParticipant && !isCreator) ? 'block' : 'none';
             document.getElementById('td-delete-btn').style.display =
-                (t.status === 'waiting' && isCreator) ? 'block' : 'none';
+                (isCreator) ? 'block' : 'none';
 
             document.getElementById('tournament-detail-modal').classList.add('active');
 
@@ -4513,25 +4516,35 @@
         }
 
         function leaveCurrentTournament() {
-            if (!_currentTournamentId || !currentUser) return;
+            if (!_currentTournamentId) return;
+            if (!currentUser) { showToast('Sign in to leave a tournament', 2500); return; }
             pwConfirm('Leave this tournament?', async () => {
-                const { error } = await supabaseClient
-                    .from('tournament_participants')
-                    .delete()
-                    .eq('tournament_id', _currentTournamentId)
-                    .eq('player_id', currentUser.id);
-                if (error) { showToast('Error: ' + error.message, 3000); return; }
-                await supabaseClient.rpc('decrement_tournament_players', { tid: _currentTournamentId })
-                    .catch(() => {});
-                showToast('You left the tournament.', 2500);
-                document.getElementById('tournament-detail-modal').classList.remove('active');
-                clearInterval(_tournamentDetailInterval);
-                loadTournamentsPage();
+                const btn = document.getElementById('td-leave-btn');
+                btn.textContent = 'Leaving…'; btn.disabled = true;
+                try {
+                    const { error } = await supabaseClient
+                        .from('tournament_participants')
+                        .delete()
+                        .eq('tournament_id', _currentTournamentId)
+                        .eq('player_id', currentUser.id);
+                    if (error) throw error;
+                    await supabaseClient.rpc('decrement_tournament_players', { tid: _currentTournamentId })
+                        .catch(() => {});
+                    showToast('You left the tournament.', 2500);
+                    document.getElementById('tournament-detail-modal').classList.remove('active');
+                    clearInterval(_tournamentDetailInterval);
+                    loadTournamentsPage();
+                } catch(e) {
+                    showToast('Could not leave: ' + e.message, 3000);
+                } finally {
+                    btn.textContent = 'Leave Tournament'; btn.disabled = false;
+                }
             });
         }
 
         function deleteCurrentTournament() {
-            if (!_currentTournamentId || !currentUser) return;
+            if (!_currentTournamentId) return;
+            if (!currentUser) { showToast('Sign in to delete a tournament', 2500); return; }
             pwConfirm('Delete this tournament? This cannot be undone.', async () => {
                 const btn = document.getElementById('td-delete-btn');
                 btn.textContent = 'Deleting…'; btn.disabled = true;
@@ -6155,13 +6168,8 @@
             document.getElementById('friend-search-input').addEventListener('keydown', e => {
                 if (e.key === 'Enter') searchFriend();
             });
-            const friendsMenuBtn = document.getElementById('friends-menu-btn');
-            if (friendsMenuBtn) {
-                friendsMenuBtn.addEventListener('click', () => {
-                    document.getElementById('friends-page').classList.remove('active');
-                    document.getElementById('lobby').style.display = 'block';
-                });
-            }
+            // friends-menu-btn is already handled by the global .menu-btn listener
+            // in setupEventListeners — no extra handler needed here.
         }
 
         // ============================================
