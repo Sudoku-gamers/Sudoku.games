@@ -220,31 +220,33 @@ create policy "public rw" on sudoku_rooms
 
             <!-- Time Controls -->
             <div class="section-label">Time Control</div>
-            <div class="time-grid">
-                <div class="time-card" data-time="120">
-                    <div class="time-main">2+0</div>
-                    <div class="time-label">Bullet</div>
-                </div>
-                <div class="time-card" data-time="300">
-                    <div class="time-main">5+0</div>
-                    <div class="time-label">Blitz</div>
-                </div>
-                <div class="time-card active" data-time="600">
-                    <div class="time-main">10+0</div>
-                    <div class="time-label">Rapid</div>
-                </div>
-                <div class="time-card" data-time="900">
-                    <div class="time-main">15+0</div>
-                    <div class="time-label">Rapid</div>
-                </div>
-                <div class="time-card" data-time="1200">
-                    <div class="time-main">20+0</div>
-                    <div class="time-label">Classical</div>
-                </div>
-                <div class="time-card" data-time="custom">
-                    <div class="time-main">Custom</div>
-                    <div class="time-label">Setup</div>
-                </div>
+            <div class="time-select-wrap">
+                <select id="lobby-time-select" class="time-select">
+                    <option value="15">0:15</option>
+                    <option value="30">0:30</option>
+                    <option value="45">0:45</option>
+                    <option value="60">1 min</option>
+                    <option value="120">2 min</option>
+                    <option value="180">3 min</option>
+                    <option value="240">4 min</option>
+                    <option value="300">5 min</option>
+                    <option value="360">6 min</option>
+                    <option value="420">7 min</option>
+                    <option value="480">8 min</option>
+                    <option value="540">9 min</option>
+                    <option value="600" selected>10 min</option>
+                    <option value="660">11 min</option>
+                    <option value="720">12 min</option>
+                    <option value="780">13 min</option>
+                    <option value="840">14 min</option>
+                    <option value="900">15 min</option>
+                    <option value="960">16 min</option>
+                    <option value="1020">17 min</option>
+                    <option value="1080">18 min</option>
+                    <option value="1140">19 min</option>
+                    <option value="1200">20 min</option>
+                </select>
+                <div class="time-select-badge" id="lobby-time-badge">Rapid</div>
             </div>
 
             <!-- Mode Selection -->
@@ -754,6 +756,37 @@ create policy "public rw" on sudoku_rooms
                         <div class="ai-diff-rating">~4000 rating</div>
                     </button>
                 </div>
+                <div style="margin-top:18px;">
+                    <div style="font-size:0.75rem;color:#777;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">Time Control</div>
+                    <div class="time-select-wrap">
+                        <select id="ai-time-select" class="time-select">
+                            <option value="15">0:15</option>
+                            <option value="30">0:30</option>
+                            <option value="45">0:45</option>
+                            <option value="60">1 min</option>
+                            <option value="120">2 min</option>
+                            <option value="180">3 min</option>
+                            <option value="240">4 min</option>
+                            <option value="300">5 min</option>
+                            <option value="360">6 min</option>
+                            <option value="420">7 min</option>
+                            <option value="480">8 min</option>
+                            <option value="540">9 min</option>
+                            <option value="600" selected>10 min</option>
+                            <option value="660">11 min</option>
+                            <option value="720">12 min</option>
+                            <option value="780">13 min</option>
+                            <option value="840">14 min</option>
+                            <option value="900">15 min</option>
+                            <option value="960">16 min</option>
+                            <option value="1020">17 min</option>
+                            <option value="1080">18 min</option>
+                            <option value="1140">19 min</option>
+                            <option value="1200">20 min</option>
+                        </select>
+                        <div class="time-select-badge" id="ai-time-badge">Rapid</div>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="action-btn btn-secondary" id="ai-difficulty-close">Cancel</button>
@@ -776,6 +809,38 @@ create policy "public rw" on sudoku_rooms
                     <button class="difficulty-btn hard"    data-diff="hard">Hard</button>
                     <button class="difficulty-btn extreme" data-diff="extreme">Extreme</button>
                     <button class="difficulty-btn size16"  data-diff="easy" data-size="16" style="grid-column:1/-1">16 × 16</button>
+                </div>
+                <div style="margin-top:18px;">
+                    <div style="font-size:0.75rem;color:#777;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">Time Control</div>
+                    <div class="time-select-wrap">
+                        <select id="solo-time-select" class="time-select">
+                            <option value="0">Untimed</option>
+                            <option value="15">0:15</option>
+                            <option value="30">0:30</option>
+                            <option value="45">0:45</option>
+                            <option value="60">1 min</option>
+                            <option value="120">2 min</option>
+                            <option value="180">3 min</option>
+                            <option value="240">4 min</option>
+                            <option value="300">5 min</option>
+                            <option value="360">6 min</option>
+                            <option value="420">7 min</option>
+                            <option value="480">8 min</option>
+                            <option value="540">9 min</option>
+                            <option value="600">10 min</option>
+                            <option value="660">11 min</option>
+                            <option value="720">12 min</option>
+                            <option value="780">13 min</option>
+                            <option value="840">14 min</option>
+                            <option value="900">15 min</option>
+                            <option value="960">16 min</option>
+                            <option value="1020">17 min</option>
+                            <option value="1080">18 min</option>
+                            <option value="1140">19 min</option>
+                            <option value="1200">20 min</option>
+                        </select>
+                        <div class="time-select-badge" id="solo-time-badge">Count up</div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1062,11 +1127,11 @@ create policy "public rw" on sudoku_rooms
                 <input type="text" class="auth-input" id="t-name" placeholder="Tournament name" maxlength="50">
 
                 <select class="auth-input" id="t-time-control" style="background:#262421;color:#bababa;border:1px solid #3a3a3a;">
-                    <option value="2+0">2+0 Bullet</option>
-                    <option value="5+0" selected>5+0 Blitz</option>
-                    <option value="10+0">10+0 Rapid</option>
-                    <option value="15+0">15+0 Rapid</option>
-                    <option value="20+0">20+0 Classical</option>
+                    <option value="2+0">2 min — Bullet</option>
+                    <option value="5+0" selected>5 min — Blitz</option>
+                    <option value="10+0">10 min — Rapid</option>
+                    <option value="15+0">15 min — Rapid</option>
+                    <option value="20+0">20 min — Classical</option>
                 </select>
 
                 <select class="auth-input" id="t-icon" style="background:#262421;color:#bababa;border:1px solid #3a3a3a;">

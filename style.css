@@ -223,6 +223,53 @@
             text-transform: capitalize;
         }
 
+        /* Time control — shared select widget */
+        .time-select-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .time-select {
+            flex: 1;
+            appearance: none;
+            -webkit-appearance: none;
+            background: var(--bg-card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23777' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 14px center;
+            border: 1.5px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 40px 12px 16px;
+            color: var(--text-bright);
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            outline: none;
+        }
+        .time-select:hover,
+        .time-select:focus {
+            border-color: var(--accent-orange);
+            background-color: rgba(213,144,32,0.06);
+        }
+        .time-select option {
+            background: #1e1c19;
+            color: #bababa;
+            font-weight: 500;
+        }
+        .time-select-badge {
+            flex-shrink: 0;
+            min-width: 72px;
+            text-align: center;
+            background: rgba(213,144,32,0.12);
+            border: 1px solid rgba(213,144,32,0.35);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--accent-orange);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
         /* ============================================
            MODE SELECTION
            ============================================ */

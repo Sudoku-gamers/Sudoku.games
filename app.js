@@ -600,7 +600,7 @@
             historyList.innerHTML = filtered.map(game => {
                 const resultText = game.result === 'win' ? 'Victory' : 
                                   game.result === 'loss' ? 'Defeat' : 'Draw';
-                const timeControlText = `${Math.floor(game.timeControl / 60)}+0`;
+                const timeControlText = `${Math.floor(game.timeControl / 60)} min`;
                 const ratingChangeText = game.ratingChange > 0 ? 
                     `+${game.ratingChange.toFixed(1)}` : game.ratingChange.toFixed(1);
                 const ratingColor = game.ratingChange > 0 ? 'var(--accent-green)' : 
@@ -1598,19 +1598,68 @@
                 });
             });
 
-            // Time cards
-            document.querySelectorAll('.time-card').forEach(card => {
-                card.addEventListener('click', () => {
-                    document.querySelectorAll('.time-card').forEach(c => c.classList.remove('active'));
-                    card.classList.add('active');
-                    if (card.dataset.time === 'custom') {
-                        const mins = parseInt(prompt('Custom time limit (minutes):', '12'));
-                        gameState.timeLimit = (!isNaN(mins) && mins > 0) ? mins * 60 : 600;
-                    } else {
-                        gameState.timeLimit = parseInt(card.dataset.time) || 600;
+            // ── Time-control helpers ────────────────────────────────────────
+            // Category badge labels keyed by seconds
+            function timeBadge(secs) {
+                if (secs === 0)       return 'Count up';
+                if (secs <= 45)      return 'Lightning';
+                if (secs <= 120)     return 'Bullet';
+                if (secs <= 300)     return 'Blitz';
+                if (secs <= 900)     return 'Rapid';
+                return 'Classical';
+            }
+
+            function setTimeLimit(secs) {
+                // 0 = untimed (solo count-up), otherwise countdown
+                gameState.timeLimit = secs > 0 ? secs : 9999;
+                // Sync all three selects
+                ['lobby-time-select','ai-time-select','solo-time-select'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        // Find closest option (exact or nearest)
+                        const opt = Array.from(el.options).find(o => parseInt(o.value) === secs);
+                        if (opt) el.value = String(secs);
                     }
                 });
-            });
+                // Update badges
+                const badge = timeBadge(secs);
+                ['lobby-time-badge','ai-time-badge'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = badge;
+                });
+                const soloBadgeEl = document.getElementById('solo-time-badge');
+                if (soloBadgeEl) soloBadgeEl.textContent = secs === 0 ? 'Count up' : badge;
+            }
+
+            // Wire lobby select
+            const lobbySelect = document.getElementById('lobby-time-select');
+            if (lobbySelect) {
+                lobbySelect.addEventListener('change', () => {
+                    setTimeLimit(parseInt(lobbySelect.value));
+                });
+            }
+
+            // Wire AI modal select
+            const aiSelect = document.getElementById('ai-time-select');
+            if (aiSelect) {
+                aiSelect.addEventListener('change', () => {
+                    setTimeLimit(parseInt(aiSelect.value));
+                    // update badge immediately
+                    const b = document.getElementById('ai-time-badge');
+                    if (b) b.textContent = timeBadge(parseInt(aiSelect.value));
+                });
+            }
+
+            // Wire Solo modal select
+            const soloSelect = document.getElementById('solo-time-select');
+            if (soloSelect) {
+                soloSelect.addEventListener('change', () => {
+                    const secs = parseInt(soloSelect.value);
+                    gameState.timeLimit = secs > 0 ? secs : 9999;
+                    const b = document.getElementById('solo-time-badge');
+                    if (b) b.textContent = secs === 0 ? 'Count up' : timeBadge(secs);
+                });
+            }
 
             // Mode cards
             document.querySelectorAll('.mode-card[data-mode]').forEach(card => {
