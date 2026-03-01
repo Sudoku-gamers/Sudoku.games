@@ -1217,7 +1217,9 @@
         function setupSideMenu() {
             const menuOverlay = document.getElementById('side-menu-overlay');
             const sideMenu = document.getElementById('side-menu');
-            const menuBtns = document.querySelectorAll('.menu-btn');
+            // All .menu-btn elements open the side menu EXCEPT game-menu-btn
+            // (which has its own dedicated exitToLobby handler)
+            const menuBtns = document.querySelectorAll('.menu-btn:not(#game-menu-btn)');
             const menuItems = document.querySelectorAll('.side-menu-item');
             
             // Open menu
@@ -1225,6 +1227,9 @@
                 btn.addEventListener('click', () => {
                     sideMenu.classList.add('active');
                     menuOverlay.classList.add('active');
+                    // Push a history state so Android back-button closes the menu
+                    // rather than triggering a page navigation
+                    history.pushState({ nav: 'menu:' + getCurrentPage() }, '');
                 });
             });
             
@@ -1340,17 +1345,17 @@
             
             // Clear history
             document.getElementById('clear-history-btn').addEventListener('click', () => {
-                if (confirm('Are you sure you want to clear all game history? This cannot be undone.')) {
+                pwConfirm('Clear all game history? This cannot be undone.', () => {
                     playerData.history = [];
                     savePlayerData();
                     renderHistory();
-                    alert('Game history cleared!');
-                }
+                    showToast('Game history cleared', 2000);
+                });
             });
             
             // Reset rating
             document.getElementById('reset-rating-btn').addEventListener('click', () => {
-                if (confirm('Are you sure you want to reset your rating to 2.0? This cannot be undone.')) {
+                pwConfirm('Reset your rating to 2.0? This cannot be undone.', () => {
                     playerRating = CONFIG.STARTING_RATING;
                     playerData.profile = {
                         rating: CONFIG.STARTING_RATING,
@@ -1364,8 +1369,8 @@
                     };
                     playerData.history = [];
                     savePlayerData();
-                    alert('Rating and stats reset!');
-                }
+                    showToast('Rating and stats reset', 2000);
+                });
             });
         }
 
@@ -1748,35 +1753,52 @@
                 document.getElementById('difficulty-modal').classList.add('active');
             });
 
-            // Inject Daily Challenge button into lobby if not already there
-            (function injectDailyChallengeBtn() {
-                if (document.getElementById('daily-challenge-lobby-btn')) return;
+            // Daily Challenge lobby button — always reads fresh state from localStorage
+            function refreshDailyChallengeBtn() {
+                const today    = new Date().toISOString().slice(0,10);
+                const dcKey    = 'sudoku_daily_challenge_' + today;
+                const done     = !!localStorage.getItem(dcKey);
+                const dcResult = done ? JSON.parse(localStorage.getItem(dcKey) || '{}') : null;
+
+                let btn = document.getElementById('daily-challenge-lobby-btn');
                 const soloBtn = document.getElementById('solo-sudoku-btn');
                 if (!soloBtn) return;
 
-                const today = new Date().toISOString().slice(0,10);
-                const dcKey = 'sudoku_daily_challenge_' + today;
-                const done = !!localStorage.getItem(dcKey);
-                const dcResult = done ? JSON.parse(localStorage.getItem(dcKey)||'{}') : null;
+                // Create the button element once
+                if (!btn) {
+                    btn = document.createElement('button');
+                    btn.id = 'daily-challenge-lobby-btn';
+                    btn.style.cssText = `
+                        width:100%;margin-top:10px;padding:14px 20px;
+                        background:linear-gradient(135deg,#1f2030,#1a1c2c);
+                        border:1px solid rgba(213,144,32,0.4);
+                        border-radius:14px;color:#d59020;font-weight:700;
+                        font-size:0.95rem;cursor:pointer;text-align:left;
+                        display:flex;align-items:center;gap:12px;
+                    `;
+                    btn.addEventListener('click', () => {
+                        // Always re-read fresh state on every click
+                        const nowKey  = 'sudoku_daily_challenge_' + new Date().toISOString().slice(0,10);
+                        const nowDone = !!localStorage.getItem(nowKey);
+                        if (nowDone) {
+                            showToast('✅ Already completed today! Come back tomorrow.', 2500);
+                        } else {
+                            launchDailyChallenge();
+                        }
+                    });
+                    soloBtn.parentNode.insertBefore(btn, soloBtn.nextSibling);
+                }
 
-                const btn = document.createElement('button');
-                btn.id = 'daily-challenge-lobby-btn';
-                btn.className = soloBtn.className; // match styling
-                btn.style.cssText = `
-                    width:100%;margin-top:10px;padding:14px 20px;
-                    background:linear-gradient(135deg,#1f2030,#1a1c2c);
-                    border:1px solid rgba(213,144,32,0.4);
-                    border-radius:14px;color:#d59020;font-weight:700;
-                    font-size:0.95rem;cursor:pointer;text-align:left;
-                    display:flex;align-items:center;gap:12px;
-                `;
-                btn.innerHTML = done
-                    ? `<span style="font-size:1.4rem;">✅</span>
+                // Refresh visual state every time
+                if (done && dcResult) {
+                    btn.innerHTML = `<span style="font-size:1.4rem;">✅</span>
                        <div>
                          <div>Daily Challenge — Done!</div>
-                         <div style="font-size:0.75rem;color:#666;margin-top:2px;">\${dcResult?.score?.toLocaleString?.() || ''} pts · Come back tomorrow</div>
-                       </div>`
-                    : `<span style="font-size:1.4rem;">📅</span>
+                         <div style="font-size:0.75rem;color:#666;margin-top:2px;">${dcResult?.score?.toLocaleString?.() || ''} pts · Come back tomorrow</div>
+                       </div>`;
+                    btn.style.opacity = '0.7';
+                } else {
+                    btn.innerHTML = `<span style="font-size:1.4rem;">📅</span>
                        <div>
                          <div>Daily Challenge</div>
                          <div style="font-size:0.75rem;color:#777;margin-top:2px;">New puzzle every day · Hard difficulty</div>
@@ -1784,14 +1806,10 @@
                        <div style="margin-left:auto;background:#d59020;color:#161512;
                                    font-size:0.65rem;font-weight:800;padding:3px 7px;
                                    border-radius:4px;">NEW</div>`;
-
-                btn.addEventListener('click', () => {
-                    if (!done) launchDailyChallenge();
-                    else showToast('✅ Already completed today! Come back tomorrow.', 2500);
-                });
-
-                soloBtn.parentNode.insertBefore(btn, soloBtn.nextSibling);
-            })();
+                    btn.style.opacity = '1';
+                }
+            }
+            refreshDailyChallengeBtn();
 
             // Difficulty selection (for puzzles)
             document.querySelectorAll('.difficulty-btn').forEach(btn => {
@@ -3028,6 +3046,45 @@
             setTimeout(() => toast.classList.remove('show'), duration);
         }
 
+        // PWA-safe alternative to window.confirm() — works in Android standalone mode
+        // where the native confirm() dialog is silently blocked.
+        function pwConfirm(message, onConfirm, onCancel) {
+            const existing = document.getElementById('_pw-confirm-overlay');
+            if (existing) existing.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = '_pw-confirm-overlay';
+            overlay.style.cssText = `
+                position:fixed;inset:0;z-index:99999;
+                background:rgba(0,0,0,0.72);
+                display:flex;align-items:center;justify-content:center;
+                padding:24px;
+            `;
+
+            const box = document.createElement('div');
+            box.style.cssText = `
+                background:#1e1c19;border:1px solid #3a3530;border-radius:16px;
+                padding:28px 24px;max-width:320px;width:100%;
+                box-shadow:0 16px 48px rgba(0,0,0,0.6);text-align:center;
+            `;
+            box.innerHTML = `
+                <div style="font-size:1rem;color:#ccc;line-height:1.5;margin-bottom:22px;">${message}</div>
+                <div style="display:flex;gap:10px;">
+                    <button id="_pw-confirm-cancel" style="flex:1;padding:12px;background:#2a2825;border:1px solid #444;
+                        border-radius:10px;color:#aaa;font-size:0.95rem;font-weight:600;cursor:pointer;">Cancel</button>
+                    <button id="_pw-confirm-ok" style="flex:1;padding:12px;background:#d44;border:none;
+                        border-radius:10px;color:#fff;font-size:0.95rem;font-weight:700;cursor:pointer;">Confirm</button>
+                </div>
+            `;
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+
+            const close = () => overlay.remove();
+            box.querySelector('#_pw-confirm-ok').addEventListener('click', () => { close(); onConfirm?.(); });
+            box.querySelector('#_pw-confirm-cancel').addEventListener('click', () => { close(); onCancel?.(); });
+            overlay.addEventListener('click', e => { if (e.target === overlay) { close(); onCancel?.(); } });
+        }
+
         function updateWrongMovesDisplay() {
             const el = document.getElementById('wrong-moves-display');
             if (!el) return;
@@ -3360,12 +3417,8 @@
                     markChallengeDoneToday(finalScore, elapsed);
                     recordDailyGame(); // also counts for streak
                     gameState.isDailyChallenge = false;
-                    // Update daily challenge label in lobby if visible
-                    const dcBtn = document.getElementById('daily-challenge-lobby-btn');
-                    if (dcBtn) {
-                        dcBtn.innerHTML = dcBtn.innerHTML.replace("Play Today's Challenge", '✅ Done for today!');
-                        dcBtn.style.opacity = '0.6';
-                    }
+                    // Refresh the lobby button so it shows the completed state
+                    if (typeof refreshDailyChallengeBtn === 'function') refreshDailyChallengeBtn();
                 }
                 if (gameState.dojoTechniqueId && solved) {
                     completeDojoPuzzle();
@@ -4459,43 +4512,43 @@
             openTournamentDetail(_currentTournamentId);
         }
 
-        async function leaveCurrentTournament() {
+        function leaveCurrentTournament() {
             if (!_currentTournamentId || !currentUser) return;
-            if (!confirm('Leave this tournament?')) return;
-            const { error } = await supabaseClient
-                .from('tournament_participants')
-                .delete()
-                .eq('tournament_id', _currentTournamentId)
-                .eq('player_id', currentUser.id);
-            if (error) { showToast('Error: ' + error.message, 3000); return; }
-            // Decrement player_count
-            await supabaseClient.rpc('decrement_tournament_players', { tid: _currentTournamentId })
-                .catch(() => {}); // RPC may not exist — soft fail
-            showToast('You left the tournament.', 2500);
-            document.getElementById('tournament-detail-modal').classList.remove('active');
-            clearInterval(_tournamentDetailInterval);
-            loadTournamentsPage();
-        }
-
-        async function deleteCurrentTournament() {
-            if (!_currentTournamentId || !currentUser) return;
-            if (!confirm('Delete this tournament? This cannot be undone.')) return;
-            const btn = document.getElementById('td-delete-btn');
-            btn.textContent = 'Deleting…'; btn.disabled = true;
-            try {
-                // Delete child records first (FK constraints)
-                await supabaseClient.from('tournament_matches').delete().eq('tournament_id', _currentTournamentId);
-                await supabaseClient.from('tournament_participants').delete().eq('tournament_id', _currentTournamentId);
-                await supabaseClient.from('tournaments').delete().eq('id', _currentTournamentId);
-                showToast('Tournament deleted.', 2500);
+            pwConfirm('Leave this tournament?', async () => {
+                const { error } = await supabaseClient
+                    .from('tournament_participants')
+                    .delete()
+                    .eq('tournament_id', _currentTournamentId)
+                    .eq('player_id', currentUser.id);
+                if (error) { showToast('Error: ' + error.message, 3000); return; }
+                await supabaseClient.rpc('decrement_tournament_players', { tid: _currentTournamentId })
+                    .catch(() => {});
+                showToast('You left the tournament.', 2500);
                 document.getElementById('tournament-detail-modal').classList.remove('active');
                 clearInterval(_tournamentDetailInterval);
                 loadTournamentsPage();
-            } catch(e) {
-                showToast('Delete failed: ' + e.message, 3000);
-            } finally {
-                btn.textContent = '🗑 Delete Tournament'; btn.disabled = false;
-            }
+            });
+        }
+
+        function deleteCurrentTournament() {
+            if (!_currentTournamentId || !currentUser) return;
+            pwConfirm('Delete this tournament? This cannot be undone.', async () => {
+                const btn = document.getElementById('td-delete-btn');
+                btn.textContent = 'Deleting…'; btn.disabled = true;
+                try {
+                    await supabaseClient.from('tournament_matches').delete().eq('tournament_id', _currentTournamentId);
+                    await supabaseClient.from('tournament_participants').delete().eq('tournament_id', _currentTournamentId);
+                    await supabaseClient.from('tournaments').delete().eq('id', _currentTournamentId);
+                    showToast('Tournament deleted.', 2500);
+                    document.getElementById('tournament-detail-modal').classList.remove('active');
+                    clearInterval(_tournamentDetailInterval);
+                    loadTournamentsPage();
+                } catch(e) {
+                    showToast('Delete failed: ' + e.message, 3000);
+                } finally {
+                    btn.textContent = '🗑 Delete Tournament'; btn.disabled = false;
+                }
+            });
         }
 
         async function createTournament() {
@@ -6685,12 +6738,17 @@
                 return;
             }
 
-            // 2. Close side menu
+            // 2. Close side menu — always check before anything else
+            //    The nav state will be 'menu:<page>' when opened by a non-lobby hamburger
             if (isSideMenuOpen()) {
                 document.getElementById('side-menu').classList.remove('active');
                 document.getElementById('side-menu-overlay')?.classList.remove('active');
                 vibrate(30);
-                history.pushState({ nav: getCurrentPage() }, '');
+                // Push back the page state so a subsequent back still works correctly
+                const page = e.state?.nav?.startsWith('menu:')
+                    ? e.state.nav.slice(5)
+                    : getCurrentPage();
+                history.pushState({ nav: page }, '');
                 return;
             }
 
@@ -6775,6 +6833,9 @@
             const vel  = Math.abs(dx) / dt;
             const isEdge = touchStartX < EDGE_ZONE;
 
+            // Ignore taps — must travel at least 20px horizontally before any gesture fires.
+            // This prevents the top-left hamburger button being misread as an edge swipe.
+            if (Math.abs(dx) < 20) return;
             // Ignore if mostly vertical or too slow (scrolling)
             if (Math.abs(dy) > MAX_VERTICAL_DRIFT) return;
             if (Math.abs(dx) < SWIPE_THRESHOLD && !isEdge) return;
