@@ -1440,6 +1440,19 @@
                 const val = gameState.solution[hr][hc];
                 gameState.puzzle[hr][hc] = val;
                 gameState.claims[hr][hc] = 1;
+
+                // Clear pencil marks on the hinted cell and the same number across its row/col/box
+                const _BS = gameState.boxSize || 3;
+                const _N  = gameState.gridSize || 9;
+                if (gameState.pencilMarks[hr][hc]) gameState.pencilMarks[hr][hc].clear();
+                for (let i = 0; i < _N; i++) {
+                    if (gameState.pencilMarks[hr]?.[i]) gameState.pencilMarks[hr][i].delete(val);
+                    if (gameState.pencilMarks[i]?.[hc]) gameState.pencilMarks[i][hc].delete(val);
+                }
+                const bR = Math.floor(hr / _BS) * _BS, bC = Math.floor(hc / _BS) * _BS;
+                for (let br = bR; br < bR + _BS; br++)
+                    for (let bc = bC; bc < bC + _BS; bc++)
+                        if (gameState.pencilMarks[br]?.[bc]) gameState.pencilMarks[br][bc].delete(val);
                 // Hint awards base 200 pts (no speed bonus since it's assisted)
                 gameState.scores.p1 += 200;
                 _lastCorrectMoveTime = Date.now(); // reset speed timer after hint
@@ -1566,7 +1579,10 @@
                 // Can only erase own cells
                 gameState.puzzle[row][col] = 0;
                 gameState.claims[row][col] = 0;
-                gameState.scores.p1 = Math.max(0, gameState.scores.p1 - 1);
+                // In solo mode scores are points (200–500 per cell); deduct a flat 200 base.
+                // In PvP modes scores are cell counts; deduct 1.
+                const deduction = gameState.gameMode === 'solo' ? 200 : 1;
+                gameState.scores.p1 = Math.max(0, gameState.scores.p1 - deduction);
                 updateScores();
             }
             // Clear pencil marks (with safety check)
@@ -1952,8 +1968,13 @@
                 }
             }
             
-            gameState.timeRemaining = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
-            gameState.p1Time = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
+            // Solo timed: if user picked a finite time limit (< 9000s), count DOWN.
+            // If untimed (9999), count UP via dojoElapsed.
+            const soloTimed = gameState.gameMode === 'solo' && gameState.timeLimit < 9000;
+            gameState.timeRemaining = (gameState.gameMode !== 'solo')
+                ? (gameState.timeLimit || 600)
+                : soloTimed ? gameState.timeLimit : Infinity;
+            gameState.p1Time = gameState.timeRemaining;
             gameState.p2Time = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
             gameState.dojoElapsed = 0;
             gameState.scores = { p1: 0, p2: 0 };
@@ -2047,6 +2068,8 @@
                     p2Time:        gameState.p2Time,
                     timeLimit:     gameState.timeLimit,
                     timeRemaining: gameState.timeRemaining,
+                    dojoElapsed:   gameState.dojoElapsed || 0,
+                    hintsUsed:     gameState.hintsUsed || 0,
                     currentPlayer: gameState.currentPlayer,
                     gameMode:      gameState.gameMode,
                     vsAI:          gameState.vsAI,
@@ -2106,6 +2129,8 @@
             gameState.difficulty   = s.difficulty;
             gameState.wrongMoves   = s.wrongMoves;
             gameState.totalWrongMoves = s.totalWrongMoves || 0;
+            gameState.hintsUsed    = s.hintsUsed || 0;
+            gameState.dojoElapsed  = s.dojoElapsed || 0;
             gameState.isRunning    = true;
             gameState.isPaused     = false;
             gameState.selectedCell = null;
@@ -2276,7 +2301,14 @@
             gameState.lastTick = now;
             
             if (!gameState.isPaused) {
-                if (gameState.gameMode === 'solo') {
+                const soloTimed = gameState.gameMode === 'solo' && gameState.timeLimit < 9000;
+                if (gameState.gameMode === 'solo' && !soloTimed) {
+                    // Untimed solo — count up
+                    gameState.dojoElapsed = (gameState.dojoElapsed || 0) + delta;
+                } else if (gameState.gameMode === 'solo' && soloTimed) {
+                    // Timed solo — count down, also track elapsed for stats
+                    gameState.timeRemaining -= delta;
+                    gameState.p1Time = gameState.timeRemaining;
                     gameState.dojoElapsed = (gameState.dojoElapsed || 0) + delta;
                 } else if (gameState.gameMode === 'simultaneous') {
                     gameState.timeRemaining -= delta;
@@ -2294,7 +2326,7 @@
                     gameState.p1Time = gameState.timeRemaining;
                 }
                 
-                if (gameState.gameMode !== 'solo' && gameState.timeRemaining <= 0) {
+                if (gameState.timeRemaining <= 0) {
                     gameState.timeRemaining = 0;
                     endGameByTimeout();
                     return;
@@ -2327,9 +2359,15 @@
             if (!p1El) return;
 
             if (gameState.gameMode === 'solo') {
-                const t = formatTime(gameState.dojoElapsed || 0);
+                const soloTimed = gameState.timeLimit < 9000;
+                // Timed solo: show countdown. Untimed solo: show elapsed count-up.
+                const t = soloTimed
+                    ? formatTime(Math.max(0, gameState.timeRemaining || 0))
+                    : formatTime(gameState.dojoElapsed || 0);
                 if (t !== _lastTimerStr.p1) { p1El.textContent = t; _lastTimerStr.p1 = t; }
                 if (_lastTimerStr.p2 !== '') { p2El.textContent = ''; _lastTimerStr.p2 = ''; }
+                // Flash red when under 30s in timed solo
+                p1El.classList.toggle('low', soloTimed && gameState.timeRemaining < 30);
             } else {
                 const t1 = formatTime(gameState.p1Time);
                 const t2 = formatTime(gameState.p2Time);
@@ -2934,9 +2972,14 @@
                     gameState.p1Time = gameState.timeRemaining;
                     gameState.p2Time = gameState.timeRemaining;
                 } else if (gameState.gameMode === 'passplay') {
-                    gameState.p1Time = Math.max(0, gameState.p1Time - PENALTY_SECONDS);
+                    // Deduct from whichever player made the mistake
+                    if (gameState.currentPlayer === 1) {
+                        gameState.p1Time = Math.max(0, gameState.p1Time - PENALTY_SECONDS);
+                    } else {
+                        gameState.p2Time = Math.max(0, gameState.p2Time - PENALTY_SECONDS);
+                    }
                 }
-                // solo mode is untimed (dojoElapsed counts up) — no time penalty applied
+                // solo mode — no time penalty applied
 
                 // Show penalty toast
                 showPenaltyToast(PENALTY_SECONDS);
@@ -2968,18 +3011,20 @@
             
             const player = gameState.gameMode === 'passplay' ? gameState.currentPlayer : 1;
             
-            // ── Speed-based scoring (mirrors reference app) ──────────────
+            // ── Speed-based scoring (solo only) ─────────────────────────
             // Base: 200 pts per cell. Speed bonus: up to +300 if placed in <5s,
             // scaling down to 0 bonus after 30s since last correct move.
-            let pointsEarned = 200;
+            // PvP modes use simple cell-count scoring (+1 per cell, handled in claimCell).
+            let pointsEarned = 0;
             if (gameState.gameMode === 'solo') {
                 const now_ = Date.now();
                 const secSinceLast = (now_ - _lastCorrectMoveTime) / 1000;
                 const speedBonus = Math.round(Math.max(0, 300 * (1 - secSinceLast / 30)));
                 pointsEarned = 200 + speedBonus;
                 _lastCorrectMoveTime = now_;
+                gameState.scores.p1 += pointsEarned;
             }
-            gameState.scores.p1 += pointsEarned;
+            // PvP: claimCell handles the +1 cell count for each player
 
             // Clear pencil marks from this cell
             if (gameState.pencilMarks && gameState.pencilMarks[row] && gameState.pencilMarks[row][col]) {
@@ -3012,7 +3057,9 @@
             updateRemainingCounts();
 
             // Spawn points float
-            const floatLabel = pointsEarned > 0 ? '+' + pointsEarned.toLocaleString() : '+200';
+            const floatLabel = gameState.gameMode === 'solo'
+                ? '+' + pointsEarned.toLocaleString()
+                : '+1';
             spawnFloatingScore(row, col, floatLabel, player === 1 ? '#4a9eff' : '#ff8c4a');
             
             if (gameState.gameMode === 'passplay') {
@@ -3283,7 +3330,9 @@
         }
 
         function endGameByTimeout() {
-            if (gameState.gameMode === 'solo') return; // solo is untimed
+            const soloTimed = gameState.gameMode === 'solo' && gameState.timeLimit < 9000;
+            if (gameState.gameMode === 'solo' && !soloTimed) return; // untimed solo never times out
+            if (soloTimed) { endGame(1, 'timeout'); return; } // solo timed: time's up, end with whatever score
             if (gameState.gameMode === 'passplay') {
                 endGame(gameState.p1Time <= 0 ? 2 : 1, 'timeout');
             } else {
@@ -3357,15 +3406,19 @@
 
             if (gameState.gameMode === 'solo') {
                 // ── Solo mode ──────────────────────────────────────────
-                const solved = reason === 'solved';
                 const elapsed = Math.round(gameState.dojoElapsed || 0);
                 const mins = Math.floor(elapsed / 60), secs = elapsed % 60;
                 const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
                 const isDaily = gameState.isDailyChallenge;
-                icon.textContent  = solved ? (isDaily ? '☀️' : '🎉') : '🤔';
-                title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : 'Puzzle Complete!') : 'Keep Going!';
-                subtitle.textContent = solved ? `Solved in \${timeStr}` : `Time elapsed: \${timeStr}`;
+                const timedOut = reason === 'timeout';
+                const solved = reason === 'solved';
+                icon.textContent  = solved ? (isDaily ? '☀️' : '🎉') : timedOut ? '⏰' : '🤔';
+                title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : 'Puzzle Complete!')
+                                  : timedOut ? "Time's Up!" : 'Keep Going!';
+                subtitle.textContent = solved ? `Solved in ${timeStr}`
+                                     : timedOut ? `Time ran out — ${timeStr} elapsed`
+                                     : `Time elapsed: ${timeStr}`;
 
                 // Best time tracking
                 const diff = gameState.difficulty || 'medium';
@@ -3504,17 +3557,22 @@
             aiTimeout = null;
 
             const aiConfig = CONFIG.AI_DIFFICULTY[gameState.aiDifficulty];
-            
-            // Calculate delay based on AI's remaining time
+
+            // Fixed per-move think time (not a % of total time — that made AI absurdly slow).
+            // Easy: 3–6s, Medium: 1.5–4s, Hard: 0.6–2s. Capped shorter if little time left.
+            const thinkRanges = {
+                easy:   { min: 3000, max: 6000 },
+                medium: { min: 1500, max: 4000 },
+                hard:   { min:  600, max: 2000 },
+            };
+            const range = thinkRanges[gameState.aiDifficulty] || thinkRanges.medium;
             const aiTime = gameState.gameMode === 'passplay' ? gameState.p2Time : gameState.timeRemaining;
-            
-            // Base delay is a percentage of remaining time, with absolute min/max bounds
-            const baseDelay = aiTime * 1000; // Convert to milliseconds
-            const minDelay = Math.max(2000, baseDelay * aiConfig.baseMinDelay); // At least 2 seconds
-            const maxDelay = Math.max(3000, baseDelay * aiConfig.baseMaxDelay); // At least 3 seconds
-            
+            // If less than 30s left, AI plays faster to avoid losing on time
+            const urgency = aiTime < 30 ? 0.3 : aiTime < 60 ? 0.6 : 1;
+            const minDelay = range.min * urgency;
+            const maxDelay = range.max * urgency;
+
             const delay = minDelay + Math.random() * (maxDelay - minDelay);
-            
             aiTimeout = setTimeout(makeAIMove, delay);
         }
 
