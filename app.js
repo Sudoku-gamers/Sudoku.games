@@ -261,7 +261,18 @@
 
             // Username displays
             document.getElementById('menu-username').textContent = username;
-            document.getElementById('menu-avatar').textContent = avatar;
+
+            // Side menu avatar — show profile photo if available, else emoji/initial
+            const menuAvatarEl = document.getElementById('menu-avatar');
+            if (menuAvatarEl) {
+                if (currentProfile?.avatar_url) {
+                    menuAvatarEl.innerHTML = `<img src="${currentProfile.avatar_url}"
+                        style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" loading="lazy">`;
+                } else {
+                    menuAvatarEl.textContent = avatar;
+                }
+            }
+
             document.getElementById('profile-username').textContent = username;
             const usernameInput = document.getElementById('username-input');
             if (usernameInput && document.activeElement !== usernameInput) {
@@ -464,7 +475,7 @@
                 <div style="background:linear-gradient(135deg,#1a1e2e,#1f2640);border:1px solid rgba(213,144,32,0.3);
                             border-radius:16px;padding:16px;margin-bottom:16px;">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                        <div style="font-size:0.95rem;font-weight:700;color:#d59020;">📅 Daily Challenge</div>
+                        <div style="font-size:0.95rem;font-weight:700;color:#d59020;">☀️ Daily Challenge</div>
                         <div style="font-size:0.8rem;color:${streakData.streak>0?'#f5a623':'#555'};">
                             🔥 ${streakData.streak} day streak
                         </div>
@@ -1755,7 +1766,7 @@
 
             // Daily Challenge lobby button — always reads fresh state from localStorage
             function refreshDailyChallengeBtn() {
-                const today    = new Date().toISOString().slice(0,10);
+                const today    = localDateStr();
                 const dcKey    = 'sudoku_daily_challenge_' + today;
                 const done     = !!localStorage.getItem(dcKey);
                 const dcResult = done ? JSON.parse(localStorage.getItem(dcKey) || '{}') : null;
@@ -1778,7 +1789,7 @@
                     `;
                     btn.addEventListener('click', () => {
                         // Always re-read fresh state on every click
-                        const nowKey  = 'sudoku_daily_challenge_' + new Date().toISOString().slice(0,10);
+                        const nowKey  = 'sudoku_daily_challenge_' + localDateStr();
                         const nowDone = !!localStorage.getItem(nowKey);
                         if (nowDone) {
                             showToast('✅ Already completed today! Come back tomorrow.', 2500);
@@ -1798,7 +1809,7 @@
                        </div>`;
                     btn.style.opacity = '0.7';
                 } else {
-                    btn.innerHTML = `<span style="font-size:1.4rem;">📅</span>
+                    btn.innerHTML = `<span style="font-size:1.4rem;">☀️</span>
                        <div>
                          <div>Daily Challenge</div>
                          <div style="font-size:0.75rem;color:#777;margin-top:2px;">New puzzle every day · Hard difficulty</div>
@@ -3352,7 +3363,7 @@
                 const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
                 const isDaily = gameState.isDailyChallenge;
-                icon.textContent  = solved ? (isDaily ? '📅' : '🎉') : '🤔';
+                icon.textContent  = solved ? (isDaily ? '☀️' : '🎉') : '🤔';
                 title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : 'Puzzle Complete!') : 'Keep Going!';
                 subtitle.textContent = solved ? `Solved in \${timeStr}` : `Time elapsed: \${timeStr}`;
 
@@ -4701,7 +4712,7 @@
             {
                 id: 'daily_challenge',
                 name: 'Daily Challenge',
-                icon: '📅',
+                icon: '☀️',
                 rank: 'Special',
                 color: '#d59020',
                 description: 'A fresh hand-crafted puzzle every day. Combines multiple techniques. Share your solve time!',
@@ -4737,7 +4748,7 @@
             const progress = getTechniqueProgress();
             const xp = getTotalDojoXP();
             const { rank, color, icon } = getDojoRank(xp);
-            const todayKey = new Date().toISOString().split('T')[0];
+            const todayKey = localDateStr();
 
             const html = `
                 <div class="modal-overlay active" id="dojo-modal" onclick="if(event.target===this)closeDojo()">
@@ -4806,7 +4817,7 @@
             closeDojo();
 
             // Show technique intro before puzzle
-            const todayKey = new Date().toISOString().split('T')[0];
+            const todayKey = localDateStr();
             const progress = getTechniqueProgress();
             const isDaily = technique.isDaily;
             const dailyDone = isDaily && progress[techniqueId]?.lastDate === todayKey;
@@ -5564,6 +5575,7 @@
                     const authBtn  = document.getElementById('side-auth-btn');
                     const signoutBtn = document.getElementById('side-signout-btn');
                     document.getElementById('menu-username').textContent = quickName;
+                    // avatar_url not loaded yet at this point — show initial, renderMenuAvatar() called after loadProfile
                     document.getElementById('menu-avatar').textContent = quickName[0].toUpperCase();
                     if (authBtn) { authBtn.textContent = quickName; authBtn.classList.add('signed-in'); }
                     if (signoutBtn) signoutBtn.style.display = 'flex';
@@ -5630,8 +5642,16 @@
                 authBtn.textContent = displayName;
                 authBtn.classList.add('signed-in');
                 if (signoutBtn) signoutBtn.style.display = 'flex';
-                document.getElementById('menu-avatar').textContent =
-                    (currentProfile?.avatar_emoji) || displayName[0].toUpperCase();
+                // Render profile photo or emoji/initial in side menu avatar
+                const _menuAv = document.getElementById('menu-avatar');
+                if (_menuAv) {
+                    if (currentProfile?.avatar_url) {
+                        _menuAv.innerHTML = `<img src="${currentProfile.avatar_url}"
+                            style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" loading="lazy">`;
+                    } else {
+                        _menuAv.textContent = (currentProfile?.avatar_emoji) || displayName[0].toUpperCase();
+                    }
+                }
                 document.getElementById('menu-username').textContent = displayName;
                 document.getElementById('menu-rating').textContent = 'Rating: ' + rating.toFixed(1);
             } else {
@@ -6416,19 +6436,29 @@
             };
         }
 
+        // Returns local date as "YYYY-MM-DD" — used for all daily challenge keys
+        // (avoids UTC mismatch where toISOString() rolls over at midnight UTC, not local midnight)
+        function localDateStr(d) {
+            d = d || new Date();
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
         function getDailyChallengeSeed() {
             const d = new Date();
-            // Seed from year+month+day so it changes daily but is same for everyone
+            // Seed matches the local date key so puzzle & key are always in sync
             return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
         }
 
         function hasDoneChallengeTodayLocal() {
-            const key = 'sudoku_daily_challenge_' + new Date().toISOString().slice(0,10);
+            const key = 'sudoku_daily_challenge_' + localDateStr();
             return !!localStorage.getItem(key);
         }
 
         function markChallengeDoneToday(score, elapsed) {
-            const key = 'sudoku_daily_challenge_' + new Date().toISOString().slice(0,10);
+            const key = 'sudoku_daily_challenge_' + localDateStr();
             localStorage.setItem(key, JSON.stringify({ score, elapsed, ts: Date.now() }));
             // Also save best daily score in soloStats
             const prev = playerData.soloStats['daily'] || {};
@@ -6443,7 +6473,7 @@
         }
 
         function getTodaysChallengeResult() {
-            const key = 'sudoku_daily_challenge_' + new Date().toISOString().slice(0,10);
+            const key = 'sudoku_daily_challenge_' + localDateStr();
             const raw = localStorage.getItem(key);
             return raw ? JSON.parse(raw) : null;
         }
