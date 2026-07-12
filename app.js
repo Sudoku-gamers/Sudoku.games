@@ -1899,15 +1899,26 @@
         // ============================================
         function resizeCanvas() {
             const container = document.querySelector('.board-container');
-            const size = Math.min(container.clientWidth, container.clientHeight, 500);
-            
-            canvas.width = size * window.devicePixelRatio;
+            if (!container) return;
+
+            // Available space inside the container (padding-box)
+            const style = getComputedStyle(container);
+            const availW = container.clientWidth
+                - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+            const availH = container.clientHeight
+                - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+
+            // On desktop the container may have no measured height yet; clamp sanely.
+            const size = Math.floor(Math.min(availW, availH, window.innerWidth, window.innerHeight));
+            if (size < 10) return; // layout not ready yet
+
+            canvas.width  = size * window.devicePixelRatio;
             canvas.height = size * window.devicePixelRatio;
-            canvas.style.width = size + 'px';
+            canvas.style.width  = size + 'px';
             canvas.style.height = size + 'px';
-            
+
             ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-            
+
             if (gameState.isRunning || gameState.claims.length > 0) {
                 markGridDirty(); drawGrid();
             }
@@ -6564,6 +6575,12 @@
             });
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
+            window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+            // ResizeObserver catches grid/flex layout changes that window resize misses
+            if (typeof ResizeObserver !== 'undefined') {
+                new ResizeObserver(() => { if (gameState.isRunning) resizeCanvas(); })
+                    .observe(document.querySelector('.board-container'));
+            }
 
             // Real-time stats started after Supabase connects
             document.getElementById('online-players').textContent = '…';
