@@ -3438,215 +3438,106 @@ select.setting-input option { background: var(--bg) !important; color: var(--tex
     pointer-events: none;
 }
 
+
 /* ═══════════════════════════════════════════════════════════
-   RESPONSIVE GAME LAYOUT — complete overhaul
-   Mobile portrait  → stacked column (default)
-   Mobile landscape → board left, controls right  
-   Tablet portrait  → wider board, bigger numpad
-   Desktop (≥1024)  → two-column grid: board | controls
+   RESPONSIVE GAME LAYOUT
    ═══════════════════════════════════════════════════════════ */
 
-/* ── 1. Compact player bars on small phones ──────────────── */
-@media (max-width: 400px) {
+/* ── Small phones (≤ 390px) ─────────────────────────────── */
+@media (max-width: 390px) {
     .player-bar { padding: 4px 8px !important; }
-    .player-name { font-size: 0.8rem !important; }
-    .player-timer { font-size: 1.1rem !important; }
-    .player-score { font-size: 0.9rem !important; padding: 3px 7px !important; }
-    .player-avatar { width: 26px !important; height: 26px !important; font-size: 0.7rem !important; }
+    .player-name { font-size: 0.75rem !important; }
+    .player-timer { font-size: 1rem !important; }
+    .player-score { font-size: 0.82rem !important; padding: 2px 5px !important; }
+    .player-avatar { width: 24px !important; height: 24px !important; font-size: 0.68rem !important; }
+    .tools-strip { gap: 3px !important; padding: 2px 4px !important; }
+    .tool-btn { width: 28px !important; height: 28px !important; font-size: 0.82rem !important; }
+    .num-pad-btn { font-size: 1rem !important; }
 }
 
-/* ── 2. Phone portrait — board fills remaining space ─────── */
+/* ── Phone portrait (≤ 767px) ───────────────────────────── */
 @media (max-width: 767px) and (orientation: portrait) {
-    #game-screen {
-        height: 100dvh;
-        overflow: hidden;
-    }
-    .board-container {
-        flex: 1 1 0 !important;
-        min-height: 0 !important;
-        padding: 4px !important;
-    }
-    #sudoku-canvas {
-        max-width: 100% !important;
-        max-height: 100% !important;
-    }
-    .permanent-number-pad {
-        padding: 5px 4px !important;
-        gap: 4px !important;
-        max-width: 100% !important;
-    }
-    .num-pad-btn {
-        height: clamp(42px, 10vw, 60px) !important;
-        font-size: clamp(1.1rem, 5vw, 1.6rem) !important;
-    }
+    .board-container { padding: 4px !important; }
+    .num-pad-btn { font-size: clamp(1.1rem, 5.5vw, 1.6rem) !important; }
 }
 
-/* ── 3. Phone landscape — board left, controls right ─────── */
+/* ── Phone landscape ─────────────────────────────────────── */
 @media (max-width: 900px) and (orientation: landscape) {
-    #game-screen {
+    #game-screen.active {
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        height: 100dvh !important;
         overflow: hidden !important;
     }
-    #game-screen > .header { display: none !important; }
-    .player-bar.top {
-        position: absolute !important;
-        top: 0; left: 0; right: 220px;
-        z-index: 10;
-        padding: 3px 10px !important;
-    }
-    .player-bar:not(.top) {
-        position: absolute !important;
-        bottom: 0; left: 0; right: 220px;
-        z-index: 10;
-        padding: 3px 10px !important;
-    }
-    .board-container {
-        flex: 1 1 auto !important;
-        min-width: 0 !important;
-        padding: 2px !important;
-        padding-top: 36px !important;
-        padding-bottom: 36px !important;
-    }
-    #sudoku-canvas {
-        max-width: 100% !important;
-        max-height: calc(100dvh - 72px) !important;
-    }
+    #game-screen.active > .header { display: none !important; }
+    .player-bar.top   { flex-shrink: 0 !important; width: calc(100% - 190px) !important; }
+    .board-container  { flex: 1 1 auto !important; min-height: 0 !important; width: calc(100% - 190px) !important; padding: 2px !important; }
+    .player-bar:not(.top) { flex-shrink: 0 !important; width: calc(100% - 190px) !important; }
     .bottom-bar {
-        width: 200px !important;
-        flex: 0 0 200px !important;
-        border-top: none !important;
-        border-left: 1px solid var(--border-color) !important;
-        display: flex !important;
-        flex-direction: column !important;
-        padding: 6px !important;
-        gap: 6px !important;
+        width: 190px !important; flex: 0 0 190px !important; align-self: stretch !important;
+        border-top: none !important; border-left: 1px solid var(--border-color) !important;
+        display: flex !important; flex-direction: column !important;
+        padding: 6px !important; gap: 5px !important;
     }
-    .tools-strip {
-        flex-wrap: wrap !important;
-        background: transparent !important;
-        border-bottom: none !important;
-        padding: 0 !important;
-        gap: 4px !important;
-    }
-    .tool-btn { width: 32px !important; height: 32px !important; }
-    .permanent-number-pad {
-        grid-template-columns: repeat(3, 1fr) !important;
-        flex: 1;
-        gap: 5px !important;
-        padding: 0 !important;
-    }
-    .num-pad-btn {
-        height: auto !important;
-        aspect-ratio: 1 !important;
-        font-size: clamp(1rem, 4vw, 1.4rem) !important;
-    }
+    .tools-strip { flex-wrap: wrap !important; border-bottom: none !important; background: transparent !important; padding: 0 !important; gap: 4px !important; height: auto !important; }
+    .tool-btn { width: 30px !important; height: 30px !important; }
+    .permanent-number-pad { grid-template-columns: repeat(3, 1fr) !important; padding: 0 !important; gap: 4px !important; }
+    .num-pad-btn { aspect-ratio: 1 !important; font-size: clamp(0.9rem, 3.5vw, 1.25rem) !important; }
+    #sudoku-canvas { max-height: 100% !important; max-width: 100% !important; }
+    .player-bar { padding: 3px 8px !important; }
+    .player-timer { font-size: 0.95rem !important; }
+    .player-name { font-size: 0.72rem !important; }
 }
 
-/* ── 4. Tablet portrait (768–1023px) ─────────────────────── */
+/* ── Tablet portrait (768–1023px) ────────────────────────── */
 @media (min-width: 768px) and (max-width: 1023px) and (orientation: portrait) {
-    .board-container { padding: 16px !important; }
-    #sudoku-canvas {
-        max-width: min(72vw, 72vh) !important;
-        max-height: min(72vw, 72vh) !important;
-    }
-    .permanent-number-pad {
-        max-width: min(72vw, 72vh) !important;
-        margin: 0 auto !important;
-        padding: 8px !important;
-        gap: 6px !important;
-    }
-    .num-pad-btn {
-        height: clamp(52px, 7vw, 72px) !important;
-        font-size: clamp(1.3rem, 4vw, 1.8rem) !important;
-    }
+    .board-container { padding: 12px !important; }
+    .permanent-number-pad { max-width: min(66vw, 52vh) !important; margin: 0 auto !important; padding: 8px !important; gap: 6px !important; }
+    .num-pad-btn { font-size: clamp(1.3rem, 3.5vw, 1.8rem) !important; }
     .main-content { max-width: 680px; }
-    .modal { max-width: 440px !important; }
 }
 
-/* ── 5. Desktop (≥1024px) — two-column grid ──────────────── */
+/* ── Desktop (≥ 1024px) — CSS Grid two-column ───────────── */
 @media (min-width: 1024px) {
-    #game-screen {
-        display: none;
+    /* Use grid so board-container always gets a proper constrained height.
+       #game-screen is already position:fixed filling the viewport,
+       so 100vh grid rows divide the space correctly. */
+    #game-screen.active {
         display: grid !important;
         grid-template-columns: 1fr 300px;
         grid-template-rows: auto 1fr auto;
-        height: 100vh !important;
-        max-width: 1400px;
-        margin: 0 auto;
-        overflow: hidden;
+        overflow: hidden !important;
     }
-    #game-screen.active { display: grid !important; }
-
-    /* Column 1: header hidden, opponent bar, board, player bar */
-    #game-screen > .header    { grid-column: 1; grid-row: 1; display: none !important; }
-    .player-bar.top           { grid-column: 1; grid-row: 1; }
-    .board-container          { grid-column: 1; grid-row: 2; min-height: 0; padding: 20px !important; }
-    .player-bar:not(.top)     { grid-column: 1; grid-row: 3; }
-
-    /* Column 2: controls panel spans all rows */
+    #game-screen.active > .header    { display: none !important; }
+    .player-bar.top                  { grid-column: 1; grid-row: 1; }
+    .board-container                 { grid-column: 1; grid-row: 2; min-height: 0 !important; padding: 20px !important; }
+    .player-bar:not(.top)            { grid-column: 1; grid-row: 3; }
     .bottom-bar {
-        grid-column: 2;
-        grid-row: 1 / -1;
-        width: 100% !important;
-        flex: none !important;
-        border-top: none !important;
-        border-left: 1px solid var(--border-color) !important;
-        display: flex !important;
-        flex-direction: column !important;
-        padding: 20px 14px !important;
-        gap: 16px !important;
-        overflow-y: auto;
+        grid-column: 2; grid-row: 1 / -1;
+        border-top: none !important; border-left: 1px solid var(--border-color) !important;
+        display: flex !important; flex-direction: column !important;
+        padding: 20px 14px !important; gap: 14px !important; overflow-y: auto !important;
+        /* reset any width/flex from base styles */
+        width: auto !important; flex: none !important; align-self: auto !important;
     }
     .tools-strip {
-        flex-wrap: wrap !important;
-        background: transparent !important;
-        border-bottom: none !important;
-        padding: 0 !important;
-        gap: 8px !important;
+        flex-wrap: wrap !important; background: transparent !important;
+        border-bottom: none !important; padding: 0 !important;
+        gap: 8px !important; height: auto !important;
     }
-    .tool-btn {
-        width: 40px !important;
-        height: 40px !important;
-        font-size: 1.1rem !important;
-        border-radius: 8px !important;
-    }
-    .permanent-number-pad {
-        grid-template-columns: repeat(5, 1fr) !important;
-        gap: 8px !important;
-        padding: 0 !important;
-        max-width: 100% !important;
-        margin: 0 !important;
-    }
-    .num-pad-btn {
-        height: clamp(46px, 4vw, 64px) !important;
-        font-size: clamp(1.3rem, 1.8vw, 1.9rem) !important;
-        border-radius: 8px !important;
-    }
-    #sudoku-canvas {
-        max-width: min(calc(100vh - 120px), calc(100vw - 360px)) !important;
-        max-height: min(calc(100vh - 120px), calc(100vw - 360px)) !important;
-    }
+    .tool-btn { width: 40px !important; height: 40px !important; font-size: 1.1rem !important; }
+    .permanent-number-pad { grid-template-columns: repeat(5, 1fr) !important; gap: 8px !important; padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
+    .num-pad-btn { aspect-ratio: unset !important; height: clamp(44px, 3.8vw, 62px) !important; font-size: clamp(1.2rem, 1.8vw, 1.8rem) !important; }
+    #sudoku-canvas { max-width: 100% !important; max-height: 100% !important; }
     .player-bar { padding: 10px 18px !important; }
     .player-timer { font-size: 1.5rem !important; }
-    .player-name { font-size: 0.95rem !important; }
-    .player-score { font-size: 1.15rem !important; }
-    .player-avatar { width: 38px !important; height: 38px !important; font-size: 0.95rem !important; }
+    .player-avatar { width: 38px !important; height: 38px !important; }
     .main-content { max-width: 760px; }
     .modal { max-width: 460px !important; }
 }
 
-/* ── 6. Large desktop (≥1280px) — wider panel ────────────── */
+/* ── Large desktop (≥ 1280px) ───────────────────────────── */
 @media (min-width: 1280px) {
-    #game-screen { grid-template-columns: 1fr 340px !important; }
-    .num-pad-btn {
-        height: clamp(54px, 4.5vw, 72px) !important;
-        font-size: clamp(1.5rem, 2vw, 2.1rem) !important;
-    }
+    #game-screen.active { grid-template-columns: 1fr 340px !important; }
+    .num-pad-btn { height: clamp(52px, 4vw, 68px) !important; font-size: clamp(1.4rem, 2vw, 2rem) !important; }
     .tool-btn { width: 44px !important; height: 44px !important; }
-    #sudoku-canvas {
-        max-width: min(calc(100vh - 120px), calc(100vw - 400px)) !important;
-        max-height: min(calc(100vh - 120px), calc(100vw - 400px)) !important;
-    }
 }

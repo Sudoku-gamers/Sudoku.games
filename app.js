@@ -1901,23 +1901,32 @@
             const container = document.querySelector('.board-container');
             if (!container) return;
 
-            // Available space inside the container (padding-box)
+            const dpr = window.devicePixelRatio || 1;
+
+            // On desktop (grid layout) the container fills the grid cell so clientHeight
+            // is valid. On mobile it's a flex child with flex:1 so also valid.
+            // Fall back to viewport if somehow 0 (layout not ready).
+            const cw = container.clientWidth  || 0;
+            const ch = container.clientHeight || 0;
             const style = getComputedStyle(container);
-            const availW = container.clientWidth
-                - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-            const availH = container.clientHeight
-                - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+            const availW = cw - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+            const availH = ch - parseFloat(style.paddingTop)  - parseFloat(style.paddingBottom);
 
-            // On desktop the container may have no measured height yet; clamp sanely.
-            const size = Math.floor(Math.min(availW, availH, window.innerWidth, window.innerHeight));
-            if (size < 10) return; // layout not ready yet
+            // If container has no height yet (e.g. flex-wrap row not constrained),
+            // fall back to viewport height minus rough bar heights (2 × 52px bars).
+            const effectiveH = availH > 20 ? availH : window.innerHeight - 104;
+            const size = Math.floor(Math.min(availW, effectiveH));
+            if (size < 10) return;
 
-            canvas.width  = size * window.devicePixelRatio;
-            canvas.height = size * window.devicePixelRatio;
+            canvas.width  = size * dpr;
+            canvas.height = size * dpr;
             canvas.style.width  = size + 'px';
             canvas.style.height = size + 'px';
 
-            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            // Always reset transform before scaling to prevent compounding on
+            // repeated calls (ResizeObserver fires multiple times per layout change).
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.scale(dpr, dpr);
 
             if (gameState.isRunning || gameState.claims.length > 0) {
                 markGridDirty(); drawGrid();
