@@ -4096,7 +4096,7 @@
                 })
                 .subscribe(async (status) => {
                     if (status === 'SUBSCRIBED') {
-                        const uid = currentUser?.id || 'guest-' + Math.random().toString(36).slice(2);
+                        const uid = currentUser?.id; // guaranteed once anonymous auth resolves
                         await _presenceChannel.track({
                             user_id: uid,
                             online_at: new Date().toISOString()
@@ -5036,7 +5036,8 @@
 
             const myName   = playerData.settings.username || 'Player';
             const myRating = playerData.rating || 2.0;
-            const myId     = currentUser?.id || ('guest_' + Math.random().toString(36).slice(2, 9));
+            if (!currentUser) { showToast('Still connecting… try again in a second', 1800); return; }
+            const myId     = currentUser.id; // real auth.uid() — anonymous or signed-in
 
             // Check the table exists first
             const { error: tableCheck } = await supabaseClient
@@ -5169,6 +5170,8 @@
 
             const roomData = {
                 id: roomId,
+                host_id: currentUser.id,
+                guest_id: opponent.player_id,
                 state: {
                     puzzle:      puzzleData.puzzle,
                     solution:    puzzleData.solution,
@@ -5264,6 +5267,8 @@
 
             const roomData = {
                 id: roomId,
+                host_id: currentUser.id,
+                guest_id: null,
                 state: {
                     puzzle: puzzleData.puzzle,
                     solution: puzzleData.solution,
@@ -5312,7 +5317,7 @@
 
             const updatedState = { ...data.state, status: 'playing', p2Name: playerData.settings.username };
             await supabaseClient.from('sudoku_rooms')
-                .update({ state: updatedState, updated_at: new Date().toISOString() })
+                .update({ state: updatedState, updated_at: new Date().toISOString(), guest_id: currentUser.id })
                 .eq('id', roomId);
 
             document.getElementById('join-room-modal').classList.remove('active');
@@ -5644,6 +5649,21 @@
             supabaseClient.auth.onAuthStateChange(async (event, session) => {
                 console.log('[Auth] event:', event, session?.user?.email);
                 currentUser = session?.user || null;
+
+                // No session at all (first visit, or fully signed out) — sign in
+                // anonymously so this device still gets a stable, real auth.uid().
+                // This lets matchmaking/rooms/presence rely on real row-ownership
+                // RLS instead of trusting client-supplied "guest_..." ids.
+                if (!currentUser && (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT')) {
+                    const { data, error } = await supabaseClient.auth.signInAnonymously();
+                    if (error) {
+                        console.error('[Auth] anonymous sign-in failed:', error.message);
+                    } else {
+                        // onAuthStateChange will fire again with the new anonymous
+                        // session (event: 'SIGNED_IN'), which re-enters this handler.
+                        return;
+                    }
+                }
 
                 if (currentUser) {
                     // Immediately update UI with what we know
