@@ -5297,9 +5297,18 @@
         async function joinOnlineRoom(roomId) {
             if (!supabaseClient) return;
             roomId = roomId.toUpperCase().trim();
+            if (!currentUser) {
+                document.getElementById('join-error').textContent = 'Still connecting… try again in a second.';
+                return;
+            }
             const { data, error } = await supabaseClient
-                .from('sudoku_rooms').select('*').eq('id', roomId).single();
-            if (error || !data) {
+                .from('sudoku_rooms').select('*').eq('id', roomId).maybeSingle();
+            if (error) {
+                console.error('[Join room] lookup failed:', error);
+                document.getElementById('join-error').textContent = 'Could not look up room: ' + error.message;
+                return;
+            }
+            if (!data) {
                 document.getElementById('join-error').textContent = 'Room not found. Check the code.';
                 return;
             }
@@ -5318,9 +5327,18 @@
             if (data.state.variant) gameState.variant = data.state.variant;
 
             const updatedState = { ...data.state, status: 'playing', p2Name: playerData.settings.username };
-            await supabaseClient.from('sudoku_rooms')
+            const { data: joined, error: joinErr } = await supabaseClient.from('sudoku_rooms')
                 .update({ state: updatedState, updated_at: new Date().toISOString(), guest_id: currentUser.id })
-                .eq('id', roomId);
+                .eq('id', roomId)
+                .select('id');
+            if (joinErr || !joined || joined.length === 0) {
+                // RLS can silently block an update (0 rows, no error), so check both
+                console.error('[Join room] update failed:', joinErr, 'rows:', joined);
+                document.getElementById('join-error').textContent =
+                    'Could not join: ' + (joinErr ? joinErr.message : 'permission blocked the update (check room policies).');
+                onlineState.roomId = null;
+                return;
+            }
 
             document.getElementById('join-room-modal').classList.remove('active');
             subscribeToRoom(roomId);
