@@ -2278,6 +2278,23 @@
             else hideOngoingIcon();
         }
 
+        // sudoku_rooms.state is a TEXT column in this Supabase project.
+        // PostgREST therefore returns JSON stored in that column as a string.
+        // Normalize both string and object values before accessing room properties.
+        function parseRoomState(value) {
+            if (!value) return null;
+            if (typeof value === 'string') {
+                try {
+                    const parsed = JSON.parse(value);
+                    return parsed && typeof parsed === 'object' ? parsed : null;
+                } catch (e) {
+                    console.warn('[Room state] Could not parse state text:', e);
+                    return null;
+                }
+            }
+            return typeof value === 'object' ? value : null;
+        }
+
         async function resignGame() {
             if (!gameState.isRunning) return;
             // Push resign to Supabase BEFORE ending locally so opponent gets notified
@@ -2286,10 +2303,11 @@
                     const { data, error: roomReadError } = await supabaseClient
                         .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).maybeSingle();
                     if (roomReadError) console.warn('[Resign] room lookup failed:', roomReadError);
-                    if (data?.state) {
-                        const state = { ...data.state, status: 'resigned', resignedBy: onlineState.playerSlot };
+                    const roomState = parseRoomState(data?.state);
+                    if (roomState) {
+                        const state = { ...roomState, status: 'resigned', resignedBy: onlineState.playerSlot };
                         await supabaseClient.from('sudoku_rooms')
-                            .update({ state, updated_at: new Date().toISOString() })
+                            .update({ state: JSON.stringify(state), updated_at: new Date().toISOString() })
                             .eq('id', onlineState.roomId);
                     }
                 } catch(e) { console.warn('Resign push failed:', e); }
@@ -4580,7 +4598,7 @@
                 const puzzle = generatePuzzle('medium');
                 await supabaseClient.from('sudoku_rooms').upsert({
                     id: roomId,
-                    state: {
+                    state: JSON.stringify({
                         puzzle: puzzle.puzzle,
                         solution: puzzle.solution,
                         board: Array(81).fill(null),
@@ -4590,7 +4608,7 @@
                         status: 'waiting',
                         timeLimit,
                         tournamentId: _currentTournamentId
-                    },
+                    }),
                     updated_at: new Date().toISOString()
                 });
             }
@@ -5182,7 +5200,7 @@
                 id: roomId,
                 host_id: currentUser.id,
                 guest_id: opponent.player_id,
-                state: {
+                state: JSON.stringify({
                     puzzle:      puzzleData.puzzle,
                     solution:    puzzleData.solution,
                     timeLimit:   gameState.timeLimit,
@@ -5197,7 +5215,7 @@
                     currentPlayer: 1,
                     moves:       [],
                     variant:     gameState.variant || 'classic',
-                },
+                }),
                 updated_at: new Date().toISOString()
             };
 
@@ -5239,8 +5257,9 @@
             setTimeout(async () => {
                 if (onlineState.roomId !== roomId || gameState.isRunning) return;
                 const { data: latestRoom, error: latestRoomError } = await supabaseClient.from('sudoku_rooms').select('state').eq('id', roomId).maybeSingle();
-                if (!latestRoomError && latestRoom?.state?.status === 'playing') {
-                    handleRoomUpdate(latestRoom.state);
+                const latestState = parseRoomState(latestRoom?.state);
+                if (!latestRoomError && latestState?.status === 'playing') {
+                    handleRoomUpdate(latestState);
                     if (gameState.isRunning) return;
                 }
                 console.warn('[Matchmaking] opponent never joined room', roomId, latestRoomError || '');
@@ -5297,7 +5316,7 @@
                 id: roomId,
                 host_id: currentUser.id,
                 guest_id: null,
-                state: {
+                state: JSON.stringify({
                     puzzle: puzzleData.puzzle,
                     solution: puzzleData.solution,
                     timeLimit: gameState.timeLimit,
@@ -5310,7 +5329,7 @@
                     currentPlayer: 1,               // ← track whose turn it is
                     moves: [],
                     variant: gameState.variant || 'classic',
-                },
+                }),
                 updated_at: new Date().toISOString()
             };
 
@@ -5338,7 +5357,12 @@
                 document.getElementById('join-error').textContent = 'Room not found. Check the code.';
                 return;
             }
-            if (data.state.status !== 'waiting') {
+            const roomState = parseRoomState(data.state);
+            if (!roomState) {
+                document.getElementById('join-error').textContent = 'Room data is invalid. Please try again.';
+                return;
+            }
+            if (roomState.status !== 'waiting') {
                 document.getElementById('join-error').textContent = 'This room is no longer available.';
                 return;
             }
@@ -5347,14 +5371,14 @@
             onlineState.isHost = false;
             onlineState.appliedMoves = new Set();
 
-            const puzzleData = { puzzle: data.state.puzzle, solution: data.state.solution };
+            const puzzleData = { puzzle: roomState.puzzle, solution: roomState.solution };
             onlineState._puzzleData = puzzleData;
             // Restore variant from room so both players use same rules
-            if (data.state.variant) gameState.variant = data.state.variant;
+            if (roomState.variant) gameState.variant = roomState.variant;
 
-            const updatedState = { ...data.state, status: 'playing', p2Name: playerData.settings.username };
+            const updatedState = { ...roomState, status: 'playing', p2Name: playerData.settings.username };
             const { data: joined, error: joinErr } = await supabaseClient.from('sudoku_rooms')
-                .update({ state: updatedState, updated_at: new Date().toISOString(), guest_id: currentUser.id })
+                .update({ state: JSON.stringify(updatedState), updated_at: new Date().toISOString(), guest_id: currentUser.id })
                 .eq('id', roomId)
                 .select('id');
             if (joinErr || !joined || joined.length === 0) {
@@ -5368,7 +5392,7 @@
 
             document.getElementById('join-room-modal').classList.remove('active');
             subscribeToRoom(roomId);
-            startOnlineGame(puzzleData, data.state, 2);
+            startOnlineGame(puzzleData, roomState, 2);
         }
 
         function subscribeToRoom(roomId) {
@@ -5378,7 +5402,7 @@
                 .on('postgres_changes', {
                     event: 'UPDATE', schema: 'public',
                     table: 'sudoku_rooms', filter: 'id=eq.' + roomId
-                }, (payload) => handleRoomUpdate(payload.new.state))
+                }, (payload) => handleRoomUpdate(parseRoomState(payload.new.state)))
                 .subscribe((status) => {
                     console.log('[Realtime] subscription status:', status);
                 });
@@ -5398,7 +5422,8 @@
                     }
                     // The room can be removed after a failed/expired match. A missing row
                     // is normal during cleanup, so do not turn it into a PostgREST 406.
-                    if (data?.state) handleRoomUpdate(data.state);
+                    const roomState = parseRoomState(data?.state);
+                    if (roomState) handleRoomUpdate(roomState);
                 } catch(e) { /* ignore */ }
             }, 2000);
         }
@@ -5484,12 +5509,13 @@
                 console.warn('[pushMove] room no longer exists; skipping move sync.');
                 return;
             }
-            const state = data.state;
+            const state = parseRoomState(data.state);
+            if (!state) { console.warn('[pushMove] room state is invalid; skipping move sync.'); return; }
             state.moves = [...(state.moves || []), moveEntry];
             state.scores = scores;
             if (nextPlayer) state.currentPlayer = nextPlayer;
             const { error } = await supabaseClient.from('sudoku_rooms')
-                .update({ state, updated_at: new Date().toISOString() })
+                .update({ state: JSON.stringify(state), updated_at: new Date().toISOString() })
                 .eq('id', onlineState.roomId);
             if (error) console.error('[pushMove] update failed:', error);
         }
