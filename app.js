@@ -5407,12 +5407,17 @@
                     console.log('[Realtime] subscription status:', status);
                 });
 
-            // Polling fallback — checks every 2s in case realtime is not enabled
-            // on the Supabase project (requires replication to be turned on)
+            // Poll continuously, including during the game. Realtime can disconnect or
+            // be disabled in Supabase; stopping this fallback once play starts leaves the
+            // other player's board and turn stuck on stale state. Move IDs are deduplicated
+            // by handleRoomUpdate(), so repeated polling is safe.
             if (onlineState._pollInterval) clearInterval(onlineState._pollInterval);
             onlineState._pollInterval = setInterval(async () => {
-                if (!onlineState.roomId) { clearInterval(onlineState._pollInterval); return; }
-                if (gameState.isRunning) { clearInterval(onlineState._pollInterval); return; }
+                if (!onlineState.roomId) {
+                    clearInterval(onlineState._pollInterval);
+                    onlineState._pollInterval = null;
+                    return;
+                }
                 try {
                     const { data, error } = await supabaseClient
                         .from('sudoku_rooms').select('state').eq('id', roomId).maybeSingle();
@@ -5425,7 +5430,7 @@
                     const roomState = parseRoomState(data?.state);
                     if (roomState) handleRoomUpdate(roomState);
                 } catch(e) { /* ignore */ }
-            }, 2000);
+            }, 1000);
         }
 
         function handleRoomUpdate(remoteState) {
@@ -5707,7 +5712,15 @@
             if (!correct) vibrate([80, 40, 80]);
             _origMakeMove(number);
             if (correct) {
-                if (onlineState.roomId) pushMoveOnline(row, col, number);
+                if (onlineState.roomId) {
+                    // In turn-based online play, hand over the local turn immediately.
+                    // Do not wait for the database round-trip before updating the UI.
+                    if (gameState.gameMode === 'passplay') {
+                        gameState.currentPlayer = onlineState.playerSlot === 1 ? 2 : 1;
+                        updateTurnIndicator();
+                    }
+                    pushMoveOnline(row, col, number);
+                }
                 vibrate(35);
                 saveOngoingGame(); // keep save fresh after every claim
             }
@@ -5718,6 +5731,10 @@
         endGame = function(winner, reason) {
             clearOngoingGame();
             hideOngoingIcon();
+            if (onlineState._pollInterval) {
+                clearInterval(onlineState._pollInterval);
+                onlineState._pollInterval = null;
+            }
             if (winner === 1) vibrate([80, 40, 80, 40, 200]);
             else if (winner === 2) vibrate([300]);
             _origEndGame(winner, reason);
