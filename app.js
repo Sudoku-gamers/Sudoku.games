@@ -261,18 +261,7 @@
 
             // Username displays
             document.getElementById('menu-username').textContent = username;
-
-            // Side menu avatar — show profile photo if available, else emoji/initial
-            const menuAvatarEl = document.getElementById('menu-avatar');
-            if (menuAvatarEl) {
-                if (currentProfile?.avatar_url) {
-                    menuAvatarEl.innerHTML = `<img src="${currentProfile.avatar_url}"
-                        style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" loading="lazy">`;
-                } else {
-                    menuAvatarEl.textContent = avatar;
-                }
-            }
-
+            document.getElementById('menu-avatar').textContent = avatar;
             document.getElementById('profile-username').textContent = username;
             const usernameInput = document.getElementById('username-input');
             if (usernameInput && document.activeElement !== usernameInput) {
@@ -475,7 +464,7 @@
                 <div style="background:linear-gradient(135deg,#1a1e2e,#1f2640);border:1px solid rgba(213,144,32,0.3);
                             border-radius:16px;padding:16px;margin-bottom:16px;">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                        <div style="font-size:0.95rem;font-weight:700;color:#d59020;">☀️ Daily Challenge</div>
+                        <div style="font-size:0.95rem;font-weight:700;color:#d59020;">📅 Daily Challenge</div>
                         <div style="font-size:0.8rem;color:${streakData.streak>0?'#f5a623':'#555'};">
                             🔥 ${streakData.streak} day streak
                         </div>
@@ -611,7 +600,7 @@
             historyList.innerHTML = filtered.map(game => {
                 const resultText = game.result === 'win' ? 'Victory' : 
                                   game.result === 'loss' ? 'Defeat' : 'Draw';
-                const timeControlText = `${Math.floor(game.timeControl / 60)} min`;
+                const timeControlText = `${Math.floor(game.timeControl / 60)}+0`;
                 const ratingChangeText = game.ratingChange > 0 ? 
                     `+${game.ratingChange.toFixed(1)}` : game.ratingChange.toFixed(1);
                 const ratingColor = game.ratingChange > 0 ? 'var(--accent-green)' : 
@@ -1228,9 +1217,7 @@
         function setupSideMenu() {
             const menuOverlay = document.getElementById('side-menu-overlay');
             const sideMenu = document.getElementById('side-menu');
-            // All .menu-btn elements open the side menu EXCEPT game-menu-btn
-            // (which has its own dedicated exitToLobby handler)
-            const menuBtns = document.querySelectorAll('.menu-btn:not(#game-menu-btn)');
+            const menuBtns = document.querySelectorAll('.menu-btn');
             const menuItems = document.querySelectorAll('.side-menu-item');
             
             // Open menu
@@ -1238,9 +1225,6 @@
                 btn.addEventListener('click', () => {
                     sideMenu.classList.add('active');
                     menuOverlay.classList.add('active');
-                    // Push a history state so Android back-button closes the menu
-                    // rather than triggering a page navigation
-                    history.pushState({ nav: 'menu:' + getCurrentPage() }, '');
                 });
             });
             
@@ -1356,17 +1340,17 @@
             
             // Clear history
             document.getElementById('clear-history-btn').addEventListener('click', () => {
-                pwConfirm('Clear all game history? This cannot be undone.', () => {
+                if (confirm('Are you sure you want to clear all game history? This cannot be undone.')) {
                     playerData.history = [];
                     savePlayerData();
                     renderHistory();
-                    showToast('Game history cleared', 2000);
-                });
+                    alert('Game history cleared!');
+                }
             });
             
             // Reset rating
             document.getElementById('reset-rating-btn').addEventListener('click', () => {
-                pwConfirm('Reset your rating to 2.0? This cannot be undone.', () => {
+                if (confirm('Are you sure you want to reset your rating to 2.0? This cannot be undone.')) {
                     playerRating = CONFIG.STARTING_RATING;
                     playerData.profile = {
                         rating: CONFIG.STARTING_RATING,
@@ -1380,8 +1364,8 @@
                     };
                     playerData.history = [];
                     savePlayerData();
-                    showToast('Rating and stats reset', 2000);
-                });
+                    alert('Rating and stats reset!');
+                }
             });
         }
 
@@ -1440,19 +1424,6 @@
                 const val = gameState.solution[hr][hc];
                 gameState.puzzle[hr][hc] = val;
                 gameState.claims[hr][hc] = 1;
-
-                // Clear pencil marks on the hinted cell and the same number across its row/col/box
-                const _BS = gameState.boxSize || 3;
-                const _N  = gameState.gridSize || 9;
-                if (gameState.pencilMarks[hr][hc]) gameState.pencilMarks[hr][hc].clear();
-                for (let i = 0; i < _N; i++) {
-                    if (gameState.pencilMarks[hr]?.[i]) gameState.pencilMarks[hr][i].delete(val);
-                    if (gameState.pencilMarks[i]?.[hc]) gameState.pencilMarks[i][hc].delete(val);
-                }
-                const bR = Math.floor(hr / _BS) * _BS, bC = Math.floor(hc / _BS) * _BS;
-                for (let br = bR; br < bR + _BS; br++)
-                    for (let bc = bC; bc < bC + _BS; bc++)
-                        if (gameState.pencilMarks[br]?.[bc]) gameState.pencilMarks[br][bc].delete(val);
                 // Hint awards base 200 pts (no speed bonus since it's assisted)
                 gameState.scores.p1 += 200;
                 _lastCorrectMoveTime = Date.now(); // reset speed timer after hint
@@ -1579,10 +1550,7 @@
                 // Can only erase own cells
                 gameState.puzzle[row][col] = 0;
                 gameState.claims[row][col] = 0;
-                // In solo mode scores are points (200–500 per cell); deduct a flat 200 base.
-                // In PvP modes scores are cell counts; deduct 1.
-                const deduction = gameState.gameMode === 'solo' ? 200 : 1;
-                gameState.scores.p1 = Math.max(0, gameState.scores.p1 - deduction);
+                gameState.scores.p1 = Math.max(0, gameState.scores.p1 - 1);
                 updateScores();
             }
             // Clear pencil marks (with safety check)
@@ -1630,68 +1598,19 @@
                 });
             });
 
-            // ── Time-control helpers ────────────────────────────────────────
-            // Category badge labels keyed by seconds
-            function timeBadge(secs) {
-                if (secs === 0)       return 'Count up';
-                if (secs <= 45)      return 'Lightning';
-                if (secs <= 120)     return 'Bullet';
-                if (secs <= 300)     return 'Blitz';
-                if (secs <= 900)     return 'Rapid';
-                return 'Classical';
-            }
-
-            function setTimeLimit(secs) {
-                // 0 = untimed (solo count-up), otherwise countdown
-                gameState.timeLimit = secs > 0 ? secs : 9999;
-                // Sync all three selects
-                ['lobby-time-select','ai-time-select','solo-time-select'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) {
-                        // Find closest option (exact or nearest)
-                        const opt = Array.from(el.options).find(o => parseInt(o.value) === secs);
-                        if (opt) el.value = String(secs);
+            // Time cards
+            document.querySelectorAll('.time-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    document.querySelectorAll('.time-card').forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    if (card.dataset.time === 'custom') {
+                        const mins = parseInt(prompt('Custom time limit (minutes):', '12'));
+                        gameState.timeLimit = (!isNaN(mins) && mins > 0) ? mins * 60 : 600;
+                    } else {
+                        gameState.timeLimit = parseInt(card.dataset.time) || 600;
                     }
                 });
-                // Update badges
-                const badge = timeBadge(secs);
-                ['lobby-time-badge','ai-time-badge'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.textContent = badge;
-                });
-                const soloBadgeEl = document.getElementById('solo-time-badge');
-                if (soloBadgeEl) soloBadgeEl.textContent = secs === 0 ? 'Count up' : badge;
-            }
-
-            // Wire lobby select
-            const lobbySelect = document.getElementById('lobby-time-select');
-            if (lobbySelect) {
-                lobbySelect.addEventListener('change', () => {
-                    setTimeLimit(parseInt(lobbySelect.value));
-                });
-            }
-
-            // Wire AI modal select
-            const aiSelect = document.getElementById('ai-time-select');
-            if (aiSelect) {
-                aiSelect.addEventListener('change', () => {
-                    setTimeLimit(parseInt(aiSelect.value));
-                    // update badge immediately
-                    const b = document.getElementById('ai-time-badge');
-                    if (b) b.textContent = timeBadge(parseInt(aiSelect.value));
-                });
-            }
-
-            // Wire Solo modal select
-            const soloSelect = document.getElementById('solo-time-select');
-            if (soloSelect) {
-                soloSelect.addEventListener('change', () => {
-                    const secs = parseInt(soloSelect.value);
-                    gameState.timeLimit = secs > 0 ? secs : 9999;
-                    const b = document.getElementById('solo-time-badge');
-                    if (b) b.textContent = secs === 0 ? 'Count up' : timeBadge(secs);
-                });
-            }
+            });
 
             // Mode cards
             document.querySelectorAll('.mode-card[data-mode]').forEach(card => {
@@ -1780,63 +1699,50 @@
                 document.getElementById('difficulty-modal').classList.add('active');
             });
 
-            // Daily Challenge lobby button — always reads fresh state from localStorage
-            function refreshDailyChallengeBtn() {
-                const today    = localDateStr();
-                const dcKey    = 'sudoku_daily_challenge_' + today;
-                const done     = !!localStorage.getItem(dcKey);
-                const dcResult = done ? JSON.parse(localStorage.getItem(dcKey) || '{}') : null;
-
-                let btn = document.getElementById('daily-challenge-lobby-btn');
+            // Inject Daily Challenge button into lobby if not already there
+            (function injectDailyChallengeBtn() {
+                if (document.getElementById('daily-challenge-lobby-btn')) return;
                 const soloBtn = document.getElementById('solo-sudoku-btn');
                 if (!soloBtn) return;
 
-                // Create the button element once
-                if (!btn) {
-                    btn = document.createElement('button');
-                    btn.id = 'daily-challenge-lobby-btn';
-                    btn.style.cssText = `
-                        width:100%;margin-top:10px;padding:14px 20px;
-                        background:linear-gradient(135deg,#1f2030,#1a1c2c);
-                        border:1px solid rgba(213,144,32,0.4);
-                        border-radius:14px;color:#d59020;font-weight:700;
-                        font-size:0.95rem;cursor:pointer;text-align:left;
-                        display:flex;align-items:center;gap:12px;
-                    `;
-                    btn.addEventListener('click', () => {
-                        // Always re-read fresh state on every click
-                        const nowKey  = 'sudoku_daily_challenge_' + localDateStr();
-                        const nowDone = !!localStorage.getItem(nowKey);
-                        if (nowDone) {
-                            showToast('✅ Already completed today! Come back tomorrow.', 2500);
-                        } else {
-                            launchDailyChallenge();
-                        }
-                    });
-                    soloBtn.parentNode.insertBefore(btn, soloBtn.nextSibling);
-                }
+                const today = new Date().toISOString().slice(0,10);
+                const dcKey = 'sudoku_daily_challenge_' + today;
+                const done = !!localStorage.getItem(dcKey);
+                const dcResult = done ? JSON.parse(localStorage.getItem(dcKey)||'{}') : null;
 
-                // Refresh visual state every time
-                if (done && dcResult) {
-                    btn.innerHTML = `<span style="font-size:1.4rem;">✅</span>
+                const btn = document.createElement('button');
+                btn.id = 'daily-challenge-lobby-btn';
+                btn.className = soloBtn.className; // match styling
+                btn.style.cssText = `
+                    width:100%;margin-top:10px;padding:14px 20px;
+                    background:linear-gradient(135deg,#1f2030,#1a1c2c);
+                    border:1px solid rgba(213,144,32,0.4);
+                    border-radius:14px;color:#d59020;font-weight:700;
+                    font-size:0.95rem;cursor:pointer;text-align:left;
+                    display:flex;align-items:center;gap:12px;
+                `;
+                btn.innerHTML = done
+                    ? \`<span style="font-size:1.4rem;">✅</span>
                        <div>
                          <div>Daily Challenge — Done!</div>
-                         <div style="font-size:0.75rem;color:#666;margin-top:2px;">${dcResult?.score?.toLocaleString?.() || ''} pts · Come back tomorrow</div>
-                       </div>`;
-                    btn.style.opacity = '0.7';
-                } else {
-                    btn.innerHTML = `<span style="font-size:1.4rem;">☀️</span>
+                         <div style="font-size:0.75rem;color:#666;margin-top:2px;">\${dcResult?.score?.toLocaleString?.() || ''} pts · Come back tomorrow</div>
+                       </div>\`
+                    : \`<span style="font-size:1.4rem;">📅</span>
                        <div>
                          <div>Daily Challenge</div>
                          <div style="font-size:0.75rem;color:#777;margin-top:2px;">New puzzle every day · Hard difficulty</div>
                        </div>
                        <div style="margin-left:auto;background:#d59020;color:#161512;
                                    font-size:0.65rem;font-weight:800;padding:3px 7px;
-                                   border-radius:4px;">NEW</div>`;
-                    btn.style.opacity = '1';
-                }
-            }
-            refreshDailyChallengeBtn();
+                                   border-radius:4px;">NEW</div>\`;
+
+                btn.addEventListener('click', () => {
+                    if (!done) launchDailyChallenge();
+                    else showToast('✅ Already completed today! Come back tomorrow.', 2500);
+                });
+
+                soloBtn.parentNode.insertBefore(btn, soloBtn.nextSibling);
+            })();
 
             // Difficulty selection (for puzzles)
             document.querySelectorAll('.difficulty-btn').forEach(btn => {
@@ -1863,29 +1769,14 @@
             document.getElementById('resign-btn').addEventListener('click', resignGame);
             document.getElementById('new-game-btn').addEventListener('click', resetGame);
             document.getElementById('game-menu-btn').addEventListener('click', exitToLobby);
-            document.getElementById('visible-back-btn')?.addEventListener('click', () => {
-                const activeModal = getTopModal();
-                if (activeModal) { activeModal.classList.remove('active'); return; }
-                if (onlineState._mmInterval) { clearInterval(onlineState._mmInterval); onlineState._mmInterval = null; }
-                if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
-                leaveMatchmakingQueue();
-                onlineState._myMMId = null; hideWaitingOverlay(); exitToLobby();
-            });
 
             // Result modal
             document.getElementById('play-again-btn').addEventListener('click', () => {
                 document.getElementById('result-modal').classList.remove('active');
                 resetGame();
             });
-            document.getElementById('back-to-lobby-btn').addEventListener('click', async () => {
+            document.getElementById('back-to-lobby-btn').addEventListener('click', () => {
                 document.getElementById('result-modal').classList.remove('active');
-                if (onlineState._mmInterval) { clearInterval(onlineState._mmInterval); onlineState._mmInterval = null; }
-                if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
-                if (onlineState.subscription && supabaseClient) { await supabaseClient.removeChannel(onlineState.subscription); onlineState.subscription = null; }
-                await leaveMatchmakingQueue();
-                hideWaitingOverlay();
-                onlineState.roomId = null;
-                gameState.isRunning = false;
                 exitToLobby();
             });
 
@@ -1914,35 +1805,15 @@
         // ============================================
         function resizeCanvas() {
             const container = document.querySelector('.board-container');
-            if (!container) return;
-
-            const dpr = window.devicePixelRatio || 1;
-
-            // On desktop (grid layout) the container fills the grid cell so clientHeight
-            // is valid. On mobile it's a flex child with flex:1 so also valid.
-            // Fall back to viewport if somehow 0 (layout not ready).
-            const cw = container.clientWidth  || 0;
-            const ch = container.clientHeight || 0;
-            const style = getComputedStyle(container);
-            const availW = cw - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-            const availH = ch - parseFloat(style.paddingTop)  - parseFloat(style.paddingBottom);
-
-            // If container has no height yet (e.g. flex-wrap row not constrained),
-            // fall back to viewport height minus rough bar heights (2 × 52px bars).
-            const effectiveH = availH > 20 ? availH : window.innerHeight - 104;
-            const size = Math.floor(Math.min(availW, effectiveH));
-            if (size < 10) return;
-
-            canvas.width  = size * dpr;
-            canvas.height = size * dpr;
-            canvas.style.width  = size + 'px';
+            const size = Math.min(container.clientWidth, container.clientHeight, 500);
+            
+            canvas.width = size * window.devicePixelRatio;
+            canvas.height = size * window.devicePixelRatio;
+            canvas.style.width = size + 'px';
             canvas.style.height = size + 'px';
-
-            // Always reset transform before scaling to prevent compounding on
-            // repeated calls (ResizeObserver fires multiple times per layout change).
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.scale(dpr, dpr);
-
+            
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            
             if (gameState.isRunning || gameState.claims.length > 0) {
                 markGridDirty(); drawGrid();
             }
@@ -2003,13 +1874,8 @@
                 }
             }
             
-            // Solo timed: if user picked a finite time limit (< 9000s), count DOWN.
-            // If untimed (9999), count UP via dojoElapsed.
-            const soloTimed = gameState.gameMode === 'solo' && gameState.timeLimit < 9000;
-            gameState.timeRemaining = (gameState.gameMode !== 'solo')
-                ? (gameState.timeLimit || 600)
-                : soloTimed ? gameState.timeLimit : Infinity;
-            gameState.p1Time = gameState.timeRemaining;
+            gameState.timeRemaining = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
+            gameState.p1Time = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
             gameState.p2Time = gameState.gameMode === 'solo' ? Infinity : (gameState.timeLimit || 600);
             gameState.dojoElapsed = 0;
             gameState.scores = { p1: 0, p2: 0 };
@@ -2103,8 +1969,6 @@
                     p2Time:        gameState.p2Time,
                     timeLimit:     gameState.timeLimit,
                     timeRemaining: gameState.timeRemaining,
-                    dojoElapsed:   gameState.dojoElapsed || 0,
-                    hintsUsed:     gameState.hintsUsed || 0,
                     currentPlayer: gameState.currentPlayer,
                     gameMode:      gameState.gameMode,
                     vsAI:          gameState.vsAI,
@@ -2164,8 +2028,6 @@
             gameState.difficulty   = s.difficulty;
             gameState.wrongMoves   = s.wrongMoves;
             gameState.totalWrongMoves = s.totalWrongMoves || 0;
-            gameState.hintsUsed    = s.hintsUsed || 0;
-            gameState.dojoElapsed  = s.dojoElapsed || 0;
             gameState.isRunning    = true;
             gameState.isPaused     = false;
             gameState.selectedCell = null;
@@ -2278,36 +2140,17 @@
             else hideOngoingIcon();
         }
 
-        // sudoku_rooms.state is a TEXT column in this Supabase project.
-        // PostgREST therefore returns JSON stored in that column as a string.
-        // Normalize both string and object values before accessing room properties.
-        function parseRoomState(value) {
-            if (!value) return null;
-            if (typeof value === 'string') {
-                try {
-                    const parsed = JSON.parse(value);
-                    return parsed && typeof parsed === 'object' ? parsed : null;
-                } catch (e) {
-                    console.warn('[Room state] Could not parse state text:', e);
-                    return null;
-                }
-            }
-            return typeof value === 'object' ? value : null;
-        }
-
         async function resignGame() {
             if (!gameState.isRunning) return;
             // Push resign to Supabase BEFORE ending locally so opponent gets notified
             if (supabaseClient && onlineState.roomId) {
                 try {
-                    const { data, error: roomReadError } = await supabaseClient
-                        .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).maybeSingle();
-                    if (roomReadError) console.warn('[Resign] room lookup failed:', roomReadError);
-                    const roomState = parseRoomState(data?.state);
-                    if (roomState) {
-                        const state = { ...roomState, status: 'resigned', resignedBy: onlineState.playerSlot };
+                    const { data } = await supabaseClient
+                        .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).single();
+                    if (data) {
+                        const state = { ...data.state, status: 'resigned', resignedBy: onlineState.playerSlot };
                         await supabaseClient.from('sudoku_rooms')
-                            .update({ state: JSON.stringify(state), updated_at: new Date().toISOString() })
+                            .update({ state, updated_at: new Date().toISOString() })
                             .eq('id', onlineState.roomId);
                     }
                 } catch(e) { console.warn('Resign push failed:', e); }
@@ -2355,36 +2198,25 @@
             gameState.lastTick = now;
             
             if (!gameState.isPaused) {
-                const soloTimed = gameState.gameMode === 'solo' && gameState.timeLimit < 9000;
-                if (gameState.gameMode === 'solo' && !soloTimed) {
-                    // Untimed solo — count up
-                    gameState.dojoElapsed = (gameState.dojoElapsed || 0) + delta;
-                } else if (gameState.gameMode === 'solo' && soloTimed) {
-                    // Timed solo — count down, also track elapsed for stats
-                    gameState.timeRemaining -= delta;
-                    gameState.p1Time = gameState.timeRemaining;
+                if (gameState.gameMode === 'solo') {
                     gameState.dojoElapsed = (gameState.dojoElapsed || 0) + delta;
                 } else if (gameState.gameMode === 'simultaneous') {
                     gameState.timeRemaining -= delta;
                     gameState.p1Time = gameState.timeRemaining;
                     gameState.p2Time = gameState.timeRemaining;
                 } else if (gameState.gameMode === 'passplay') {
-                    // Only the player whose turn it is loses time. Keep timeRemaining
-                    // tied to that active clock (not the minimum of both clocks), or
-                    // the inactive player's lower clock can trigger a false timeout.
                     if (gameState.currentPlayer === 1) {
-                        gameState.p1Time = Math.max(0, gameState.p1Time - delta);
-                        gameState.timeRemaining = gameState.p1Time;
+                        gameState.p1Time -= delta;
                     } else {
-                        gameState.p2Time = Math.max(0, gameState.p2Time - delta);
-                        gameState.timeRemaining = gameState.p2Time;
+                        gameState.p2Time -= delta;
                     }
+                    gameState.timeRemaining = Math.min(gameState.p1Time, gameState.p2Time);
                 } else {
                     gameState.timeRemaining -= delta;
                     gameState.p1Time = gameState.timeRemaining;
                 }
                 
-                if (gameState.timeRemaining <= 0) {
+                if (gameState.gameMode !== 'solo' && gameState.timeRemaining <= 0) {
                     gameState.timeRemaining = 0;
                     endGameByTimeout();
                     return;
@@ -2417,31 +2249,18 @@
             if (!p1El) return;
 
             if (gameState.gameMode === 'solo') {
-                const soloTimed = gameState.timeLimit < 9000;
-                // Timed solo: show countdown. Untimed solo: show elapsed count-up.
-                const t = soloTimed
-                    ? formatTime(Math.max(0, gameState.timeRemaining || 0))
-                    : formatTime(gameState.dojoElapsed || 0);
+                const t = formatTime(gameState.dojoElapsed || 0);
                 if (t !== _lastTimerStr.p1) { p1El.textContent = t; _lastTimerStr.p1 = t; }
                 if (_lastTimerStr.p2 !== '') { p2El.textContent = ''; _lastTimerStr.p2 = ''; }
-                // Flash red when under 30s in timed solo
-                p1El.classList.toggle('low', soloTimed && gameState.timeRemaining < 30);
             } else {
-                // In online turn-based play, display the local player's clock first
-                // and the opponent's second, regardless of whether this client is slot 1 or 2.
-                const onlineTurnBased = gameState.gameMode === 'passplay' && !!onlineState.roomId;
-                const ownTime = onlineTurnBased
-                    ? (onlineState.playerSlot === 1 ? gameState.p1Time : gameState.p2Time)
-                    : gameState.p1Time;
-                const opponentTime = onlineTurnBased
-                    ? (onlineState.playerSlot === 1 ? gameState.p2Time : gameState.p1Time)
-                    : gameState.p2Time;
-                const t1 = formatTime(ownTime);
-                const t2 = formatTime(opponentTime);
+                const t1 = formatTime(gameState.p1Time);
+                const t2 = formatTime(gameState.p2Time);
                 if (t1 !== _lastTimerStr.p1) { p1El.textContent = t1; _lastTimerStr.p1 = t1; }
                 if (t2 !== _lastTimerStr.p2) { p2El.textContent = t2; _lastTimerStr.p2 = t2; }
-                p1El.classList.toggle('low', ownTime < 30);
-                p2El.classList.toggle('low', opponentTime < 30);
+                const low1 = gameState.p1Time < 30;
+                const low2 = gameState.p2Time < 30;
+                p1El.classList.toggle('low', low1);
+                p2El.classList.toggle('low', low2);
             }
         }
 
@@ -3037,14 +2856,9 @@
                     gameState.p1Time = gameState.timeRemaining;
                     gameState.p2Time = gameState.timeRemaining;
                 } else if (gameState.gameMode === 'passplay') {
-                    // Deduct from whichever player made the mistake
-                    if (gameState.currentPlayer === 1) {
-                        gameState.p1Time = Math.max(0, gameState.p1Time - PENALTY_SECONDS);
-                    } else {
-                        gameState.p2Time = Math.max(0, gameState.p2Time - PENALTY_SECONDS);
-                    }
+                    gameState.p1Time = Math.max(0, gameState.p1Time - PENALTY_SECONDS);
                 }
-                // solo mode — no time penalty applied
+                // solo mode is untimed (dojoElapsed counts up) — no time penalty applied
 
                 // Show penalty toast
                 showPenaltyToast(PENALTY_SECONDS);
@@ -3076,20 +2890,18 @@
             
             const player = gameState.gameMode === 'passplay' ? gameState.currentPlayer : 1;
             
-            // ── Speed-based scoring (solo only) ─────────────────────────
+            // ── Speed-based scoring (mirrors reference app) ──────────────
             // Base: 200 pts per cell. Speed bonus: up to +300 if placed in <5s,
             // scaling down to 0 bonus after 30s since last correct move.
-            // PvP modes use simple cell-count scoring (+1 per cell, handled in claimCell).
-            let pointsEarned = 0;
+            let pointsEarned = 200;
             if (gameState.gameMode === 'solo') {
                 const now_ = Date.now();
                 const secSinceLast = (now_ - _lastCorrectMoveTime) / 1000;
                 const speedBonus = Math.round(Math.max(0, 300 * (1 - secSinceLast / 30)));
                 pointsEarned = 200 + speedBonus;
                 _lastCorrectMoveTime = now_;
-                gameState.scores.p1 += pointsEarned;
             }
-            // PvP: claimCell handles the +1 cell count for each player
+            gameState.scores.p1 += pointsEarned;
 
             // Clear pencil marks from this cell
             if (gameState.pencilMarks && gameState.pencilMarks[row] && gameState.pencilMarks[row][col]) {
@@ -3122,9 +2934,7 @@
             updateRemainingCounts();
 
             // Spawn points float
-            const floatLabel = gameState.gameMode === 'solo'
-                ? '+' + pointsEarned.toLocaleString()
-                : '+1';
+            const floatLabel = pointsEarned > 0 ? '+' + pointsEarned.toLocaleString() : '+200';
             spawnFloatingScore(row, col, floatLabel, player === 1 ? '#4a9eff' : '#ff8c4a');
             
             if (gameState.gameMode === 'passplay') {
@@ -3167,45 +2977,6 @@
             void toast.offsetWidth;
             toast.classList.add('show');
             setTimeout(() => toast.classList.remove('show'), duration);
-        }
-
-        // PWA-safe alternative to window.confirm() — works in Android standalone mode
-        // where the native confirm() dialog is silently blocked.
-        function pwConfirm(message, onConfirm, onCancel) {
-            const existing = document.getElementById('_pw-confirm-overlay');
-            if (existing) existing.remove();
-
-            const overlay = document.createElement('div');
-            overlay.id = '_pw-confirm-overlay';
-            overlay.style.cssText = `
-                position:fixed;inset:0;z-index:99999;
-                background:rgba(0,0,0,0.72);
-                display:flex;align-items:center;justify-content:center;
-                padding:24px;
-            `;
-
-            const box = document.createElement('div');
-            box.style.cssText = `
-                background:#1e1c19;border:1px solid #3a3530;border-radius:16px;
-                padding:28px 24px;max-width:320px;width:100%;
-                box-shadow:0 16px 48px rgba(0,0,0,0.6);text-align:center;
-            `;
-            box.innerHTML = `
-                <div style="font-size:1rem;color:#ccc;line-height:1.5;margin-bottom:22px;">${message}</div>
-                <div style="display:flex;gap:10px;">
-                    <button id="_pw-confirm-cancel" style="flex:1;padding:12px;background:#2a2825;border:1px solid #444;
-                        border-radius:10px;color:#aaa;font-size:0.95rem;font-weight:600;cursor:pointer;">Cancel</button>
-                    <button id="_pw-confirm-ok" style="flex:1;padding:12px;background:#d44;border:none;
-                        border-radius:10px;color:#fff;font-size:0.95rem;font-weight:700;cursor:pointer;">Confirm</button>
-                </div>
-            `;
-            overlay.appendChild(box);
-            document.body.appendChild(overlay);
-
-            const close = () => overlay.remove();
-            box.querySelector('#_pw-confirm-ok').addEventListener('click', () => { close(); onConfirm?.(); });
-            box.querySelector('#_pw-confirm-cancel').addEventListener('click', () => { close(); onCancel?.(); });
-            overlay.addEventListener('click', e => { if (e.target === overlay) { close(); onCancel?.(); } });
         }
 
         function updateWrongMovesDisplay() {
@@ -3395,9 +3166,7 @@
         }
 
         function endGameByTimeout() {
-            const soloTimed = gameState.gameMode === 'solo' && gameState.timeLimit < 9000;
-            if (gameState.gameMode === 'solo' && !soloTimed) return; // untimed solo never times out
-            if (soloTimed) { endGame(1, 'timeout'); return; } // solo timed: time's up, end with whatever score
+            if (gameState.gameMode === 'solo') return; // solo is untimed
             if (gameState.gameMode === 'passplay') {
                 endGame(gameState.p1Time <= 0 ? 2 : 1, 'timeout');
             } else {
@@ -3471,19 +3240,15 @@
 
             if (gameState.gameMode === 'solo') {
                 // ── Solo mode ──────────────────────────────────────────
+                const solved = reason === 'solved';
                 const elapsed = Math.round(gameState.dojoElapsed || 0);
                 const mins = Math.floor(elapsed / 60), secs = elapsed % 60;
                 const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
                 const isDaily = gameState.isDailyChallenge;
-                const timedOut = reason === 'timeout';
-                const solved = reason === 'solved';
-                icon.textContent  = solved ? (isDaily ? '☀️' : '🎉') : timedOut ? '⏰' : '🤔';
-                title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : 'Puzzle Complete!')
-                                  : timedOut ? "Time's Up!" : 'Keep Going!';
-                subtitle.textContent = solved ? `Solved in ${timeStr}`
-                                     : timedOut ? `Time ran out — ${timeStr} elapsed`
-                                     : `Time elapsed: ${timeStr}`;
+                icon.textContent  = solved ? (isDaily ? '📅' : '🎉') : '🤔';
+                title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : 'Puzzle Complete!') : 'Keep Going!';
+                subtitle.textContent = solved ? \`Solved in \${timeStr}\` : \`Time elapsed: \${timeStr}\`;
 
                 // Best time tracking
                 const diff = gameState.difficulty || 'medium';
@@ -3546,8 +3311,12 @@
                     markChallengeDoneToday(finalScore, elapsed);
                     recordDailyGame(); // also counts for streak
                     gameState.isDailyChallenge = false;
-                    // Refresh the lobby button so it shows the completed state
-                    if (typeof refreshDailyChallengeBtn === 'function') refreshDailyChallengeBtn();
+                    // Update daily challenge label in lobby if visible
+                    const dcBtn = document.getElementById('daily-challenge-lobby-btn');
+                    if (dcBtn) {
+                        dcBtn.innerHTML = dcBtn.innerHTML.replace('Play Today's Challenge', '✅ Done for today!');
+                        dcBtn.style.opacity = '0.6';
+                    }
                 }
                 if (gameState.dojoTechniqueId && solved) {
                     completeDojoPuzzle();
@@ -3622,22 +3391,17 @@
             aiTimeout = null;
 
             const aiConfig = CONFIG.AI_DIFFICULTY[gameState.aiDifficulty];
-
-            // Fixed per-move think time (not a % of total time — that made AI absurdly slow).
-            // Easy: 3–6s, Medium: 1.5–4s, Hard: 0.6–2s. Capped shorter if little time left.
-            const thinkRanges = {
-                easy:   { min: 3000, max: 6000 },
-                medium: { min: 1500, max: 4000 },
-                hard:   { min:  600, max: 2000 },
-            };
-            const range = thinkRanges[gameState.aiDifficulty] || thinkRanges.medium;
+            
+            // Calculate delay based on AI's remaining time
             const aiTime = gameState.gameMode === 'passplay' ? gameState.p2Time : gameState.timeRemaining;
-            // If less than 30s left, AI plays faster to avoid losing on time
-            const urgency = aiTime < 30 ? 0.3 : aiTime < 60 ? 0.6 : 1;
-            const minDelay = range.min * urgency;
-            const maxDelay = range.max * urgency;
-
+            
+            // Base delay is a percentage of remaining time, with absolute min/max bounds
+            const baseDelay = aiTime * 1000; // Convert to milliseconds
+            const minDelay = Math.max(2000, baseDelay * aiConfig.baseMinDelay); // At least 2 seconds
+            const maxDelay = Math.max(3000, baseDelay * aiConfig.baseMaxDelay); // At least 3 seconds
+            
             const delay = minDelay + Math.random() * (maxDelay - minDelay);
+            
             aiTimeout = setTimeout(makeAIMove, delay);
         }
 
@@ -3995,7 +3759,7 @@
         // ============================================
         window.addEventListener('beforeunload', () => {
             if (aiTimeout) clearTimeout(aiTimeout);
-            if (supabaseClient && onlineState.subscription) supabaseClient.removeChannel(onlineState.subscription);
+            if (supabase && onlineState.subscription) supabase.removeChannel(onlineState.subscription);
         });
 
         // ============================================
@@ -4019,7 +3783,6 @@
             _pollInterval: null,
             _mmInterval: null,
             _myMMId: null,
-            _activeMatchId: null,
         };
 
         function generateRoomId() {
@@ -4095,7 +3858,7 @@
                     }
                 });
                 const { error } = await supabaseClient.from('sudoku_rooms').select('id').limit(1);
-                if (error) console.warn('[Supabase] health check failed (client kept):', error.message);
+                if (error) throw error;
                 await saveCredentials(url, key);
                 // Also keep localStorage as fallback
                 localStorage.setItem('sb_url', url);
@@ -4108,11 +3871,9 @@
                 startRealtimeStats();
                 loadTournaments();
             } catch(e) {
-                console.error('[Supabase connect failed]', e);
                 statusEl.className = 'config-status err';
                 statusEl.textContent = '● ' + (e.message || 'Connection failed — check URL & key');
-                // Only a missing SDK or failed createClient leaves the client unusable
-                if (!window.supabase) supabaseClient = null;
+                supabaseClient = null;
             }
         }
 
@@ -4144,7 +3905,7 @@
                 })
                 .subscribe(async (status) => {
                     if (status === 'SUBSCRIBED') {
-                        const uid = currentUser?.id; // guaranteed once anonymous auth resolves
+                        const uid = currentUser?.id || 'guest-' + Math.random().toString(36).slice(2);
                         await _presenceChannel.track({
                             user_id: uid,
                             online_at: new Date().toISOString()
@@ -4265,9 +4026,6 @@
             const link = document.getElementById('td-link').textContent;
             navigator.clipboard.writeText(link).then(() => showToast('Link copied!', 1500));
         };
-
-        // Exposed on window — called from inline onclick in dynamically-built HTML strings
-        window.openTournamentDetail = function(tid) { openTournamentDetail(tid); };
 
         function initTournamentsPage() {
             const menuBtn = document.getElementById('tournaments-menu-btn');
@@ -4515,9 +4273,9 @@
             document.getElementById('td-launch-btn').style.display =
                 (t.status === 'waiting' && isCreator && t.player_count >= (t.min_players || 2)) ? 'block' : 'none';
             document.getElementById('td-leave-btn').style.display =
-                (isParticipant && !isCreator) ? 'block' : 'none';
+                (t.status === 'waiting' && isParticipant && !isCreator) ? 'block' : 'none';
             document.getElementById('td-delete-btn').style.display =
-                (isCreator) ? 'block' : 'none';
+                (t.status === 'waiting' && isCreator) ? 'block' : 'none';
 
             document.getElementById('tournament-detail-modal').classList.add('active');
 
@@ -4609,7 +4367,7 @@
                 const puzzle = generatePuzzle('medium');
                 await supabaseClient.from('sudoku_rooms').upsert({
                     id: roomId,
-                    state: JSON.stringify({
+                    state: {
                         puzzle: puzzle.puzzle,
                         solution: puzzle.solution,
                         board: Array(81).fill(null),
@@ -4619,7 +4377,7 @@
                         status: 'waiting',
                         timeLimit,
                         tournamentId: _currentTournamentId
-                    }),
+                    },
                     updated_at: new Date().toISOString()
                 });
             }
@@ -4652,53 +4410,43 @@
             openTournamentDetail(_currentTournamentId);
         }
 
-        function leaveCurrentTournament() {
-            if (!_currentTournamentId) return;
-            if (!currentUser) { showToast('Sign in to leave a tournament', 2500); return; }
-            pwConfirm('Leave this tournament?', async () => {
-                const btn = document.getElementById('td-leave-btn');
-                btn.textContent = 'Leaving…'; btn.disabled = true;
-                try {
-                    const { error } = await supabaseClient
-                        .from('tournament_participants')
-                        .delete()
-                        .eq('tournament_id', _currentTournamentId)
-                        .eq('player_id', currentUser.id);
-                    if (error) throw error;
-                    await supabaseClient.rpc('decrement_tournament_players', { tid: _currentTournamentId })
-                        .catch(() => {});
-                    showToast('You left the tournament.', 2500);
-                    document.getElementById('tournament-detail-modal').classList.remove('active');
-                    clearInterval(_tournamentDetailInterval);
-                    loadTournamentsPage();
-                } catch(e) {
-                    showToast('Could not leave: ' + e.message, 3000);
-                } finally {
-                    btn.textContent = 'Leave Tournament'; btn.disabled = false;
-                }
-            });
+        async function leaveCurrentTournament() {
+            if (!_currentTournamentId || !currentUser) return;
+            if (!confirm('Leave this tournament?')) return;
+            const { error } = await supabaseClient
+                .from('tournament_participants')
+                .delete()
+                .eq('tournament_id', _currentTournamentId)
+                .eq('player_id', currentUser.id);
+            if (error) { showToast('Error: ' + error.message, 3000); return; }
+            // Decrement player_count
+            await supabaseClient.rpc('decrement_tournament_players', { tid: _currentTournamentId })
+                .catch(() => {}); // RPC may not exist — soft fail
+            showToast('You left the tournament.', 2500);
+            document.getElementById('tournament-detail-modal').classList.remove('active');
+            clearInterval(_tournamentDetailInterval);
+            loadTournamentsPage();
         }
 
-        function deleteCurrentTournament() {
-            if (!_currentTournamentId) return;
-            if (!currentUser) { showToast('Sign in to delete a tournament', 2500); return; }
-            pwConfirm('Delete this tournament? This cannot be undone.', async () => {
-                const btn = document.getElementById('td-delete-btn');
-                btn.textContent = 'Deleting…'; btn.disabled = true;
-                try {
-                    await supabaseClient.from('tournament_matches').delete().eq('tournament_id', _currentTournamentId);
-                    await supabaseClient.from('tournament_participants').delete().eq('tournament_id', _currentTournamentId);
-                    await supabaseClient.from('tournaments').delete().eq('id', _currentTournamentId);
-                    showToast('Tournament deleted.', 2500);
-                    document.getElementById('tournament-detail-modal').classList.remove('active');
-                    clearInterval(_tournamentDetailInterval);
-                    loadTournamentsPage();
-                } catch(e) {
-                    showToast('Delete failed: ' + e.message, 3000);
-                } finally {
-                    btn.textContent = '🗑 Delete Tournament'; btn.disabled = false;
-                }
-            });
+        async function deleteCurrentTournament() {
+            if (!_currentTournamentId || !currentUser) return;
+            if (!confirm('Delete this tournament? This cannot be undone.')) return;
+            const btn = document.getElementById('td-delete-btn');
+            btn.textContent = 'Deleting…'; btn.disabled = true;
+            try {
+                // Delete child records first (FK constraints)
+                await supabaseClient.from('tournament_matches').delete().eq('tournament_id', _currentTournamentId);
+                await supabaseClient.from('tournament_participants').delete().eq('tournament_id', _currentTournamentId);
+                await supabaseClient.from('tournaments').delete().eq('id', _currentTournamentId);
+                showToast('Tournament deleted.', 2500);
+                document.getElementById('tournament-detail-modal').classList.remove('active');
+                clearInterval(_tournamentDetailInterval);
+                loadTournamentsPage();
+            } catch(e) {
+                showToast('Delete failed: ' + e.message, 3000);
+            } finally {
+                btn.textContent = '🗑 Delete Tournament'; btn.disabled = false;
+            }
         }
 
         async function createTournament() {
@@ -4838,7 +4586,7 @@
             {
                 id: 'daily_challenge',
                 name: 'Daily Challenge',
-                icon: '☀️',
+                icon: '📅',
                 rank: 'Special',
                 color: '#d59020',
                 description: 'A fresh hand-crafted puzzle every day. Combines multiple techniques. Share your solve time!',
@@ -4874,7 +4622,7 @@
             const progress = getTechniqueProgress();
             const xp = getTotalDojoXP();
             const { rank, color, icon } = getDojoRank(xp);
-            const todayKey = localDateStr();
+            const todayKey = new Date().toISOString().split('T')[0];
 
             const html = `
                 <div class="modal-overlay active" id="dojo-modal" onclick="if(event.target===this)closeDojo()">
@@ -4943,7 +4691,7 @@
             closeDojo();
 
             // Show technique intro before puzzle
-            const todayKey = localDateStr();
+            const todayKey = new Date().toISOString().split('T')[0];
             const progress = getTechniqueProgress();
             const isDaily = technique.isDaily;
             const dailyDone = isDaily && progress[techniqueId]?.lastDate === todayKey;
@@ -5081,116 +4829,128 @@
         // ============================================
         async function findOpponent() {
             if (!supabaseClient) { showToast('Not connected', 1500); return; }
-            if (!currentUser) { showToast('Still connecting… try again in a second', 1800); return; }
-            if (onlineState._mmInterval) { clearInterval(onlineState._mmInterval); onlineState._mmInterval = null; }
 
-            const myName = playerData.settings.username || 'Player';
-            const myRating = Number(playerData.rating || 2.0);
-            const myId = currentUser.id;
-            let searchTime = 0;
-            let busy = false;
-            let handledMatchId = null;
+            const myName   = playerData.settings.username || 'Player';
+            const myRating = playerData.rating || 2.0;
+            const myId     = currentUser?.id || ('guest_' + Math.random().toString(36).slice(2, 9));
 
+            // Check the table exists first
+            const { error: tableCheck } = await supabaseClient
+                .from('matchmaking_queue').select('player_id').limit(1);
+            if (tableCheck) {
+                console.error('[Matchmaking] Table check failed:', tableCheck);
+                if (tableCheck.code === '42P01' || tableCheck.message?.includes('does not exist')) {
+                    showToast('⚠ Run the matchmaking SQL in Supabase first!', 4000);
+                } else {
+                    showToast('Error: ' + (tableCheck.message || tableCheck.code), 3000);
+                }
+                return;
+            }
+
+            // Show searching UI
             document.getElementById('waiting-title').textContent = 'Finding Opponent…';
             document.getElementById('waiting-room-section').style.display = 'none';
             document.getElementById('waiting-sub').style.display = 'none';
             document.getElementById('matchmaking-status').style.display = 'block';
             document.getElementById('waiting-overlay').classList.add('active');
+
+            // Remove any stale entry first
+            await supabaseClient.from('matchmaking_queue')
+                .delete().eq('player_id', myId);
+
+            // Add ourselves to the queue
+            const { error } = await supabaseClient.from('matchmaking_queue').insert({
+                player_id:   myId,
+                player_name: myName,
+                rating:      myRating,
+                time_limit:  gameState.timeLimit,
+                game_mode:   gameState.gameMode,
+                difficulty:  gameState.difficulty,
+                joined_at:   new Date().toISOString(),
+            });
+
+            if (error) {
+                console.error('[Matchmaking] Insert error:', error);
+                showToast('Matchmaking error: ' + (error.message || error.code || JSON.stringify(error)), 3000);
+                hideWaitingOverlay();
+                return;
+            }
+
+            let searchTime = 0;
             onlineState._myMMId = myId;
-            onlineState._activeMatchId = null;
 
-            const pollMatchmaking = async () => {
-                if (busy || !onlineState._mmInterval) return;
-                busy = true;
-                try {
-                    searchTime += 1.5;
-                    const info = document.getElementById('matchmaking-info');
-                    if (info) {
-                        if (searchTime < 10) info.textContent = `Searching for a player near your rating (${myRating.toFixed(1)})…`;
-                        else if (searchTime < 30) info.textContent = 'Still searching… expanding rating range';
-                        else info.textContent = `Searching globally… (${Math.floor(searchTime)}s)`;
-                    }
+            // Poll for a match every 1.5s
+            onlineState._mmInterval = setInterval(async () => {
+                searchTime += 1.5;
 
-                    const { data, error } = await supabaseClient.rpc('find_or_create_matchmaking_match', {
-                        p_player_name: myName,
-                        p_rating: myRating,
-                        p_time_limit: gameState.timeLimit,
-                        p_game_mode: gameState.gameMode,
-                        p_difficulty: gameState.difficulty,
-                        p_variant: gameState.variant || 'classic'
-                    });
-                    if (error) {
-                        console.error('[Matchmaking] atomic matchmaking RPC failed:', error);
-                        clearInterval(onlineState._mmInterval);
-                        onlineState._mmInterval = null;
-                        await leaveMatchmakingQueue();
-                        hideWaitingOverlay();
-                        showToast('Matchmaking setup error. Run the new matchmaking SQL in Supabase.', 4500);
-                        return;
-                    }
-
-                    const match = Array.isArray(data) ? data[0] : data;
-                    if (match?.status === 'matched' || match?.status === 'paired' || match?.status === 'ready') {
-                        const matchId = match.match_id || match.id;
-                        if (!matchId) return;
-                        onlineState._activeMatchId = matchId;
-
-                        // The designated host creates the room exactly once. The guest waits
-                        // for the host to publish the room ID through the same atomic match row.
-                        if (String(match.host_id) === String(myId)) {
-                            if (handledMatchId === matchId) return;
-                            handledMatchId = matchId;
-                            clearInterval(onlineState._mmInterval);
-                            onlineState._mmInterval = null;
-                            await startMatchmakingAsHost({
-                                id: matchId,
-                                match_id: matchId,
-                                player_id: match.guest_id,
-                                player_name: match.guest_name || 'Opponent'
-                            });
-                            return;
-                        }
-
-                        if (match.room_id && match.status === 'ready') {
-                            clearInterval(onlineState._mmInterval);
-                            onlineState._mmInterval = null;
-                            hideWaitingOverlay();
-                            await joinOnlineRoom(match.room_id);
-                            if (gameState.isRunning && onlineState.roomId === match.room_id) {
-                                onlineState._activeMatchId = null;
-                                showToast(`⚔ Matched with ${match.host_name || 'opponent'}!`, 2500);
-                            } else {
-                                console.warn('[Matchmaking] room was published but joining failed', match.room_id);
-                                await leaveMatchmakingQueue();
-                                setTimeout(findOpponent, 1500);
-                            }
-                        }
-                        return;
-                    }
-
-                    if (match?.status === 'cancelled' || match?.status === 'expired') {
-                        // A stale match was cancelled; the next poll creates a fresh queue entry.
-                        onlineState._activeMatchId = null;
-                    }
-
-                    if (searchTime > 240) {
-                        clearInterval(onlineState._mmInterval);
-                        onlineState._mmInterval = null;
-                        await leaveMatchmakingQueue();
-                        hideWaitingOverlay();
-                        showToast('No opponents found right now — try again soon', 3000);
-                    }
-                } catch (e) {
-                    console.error('[Matchmaking] poll error:', e);
-                } finally {
-                    busy = false;
+                // Update status message
+                const info = document.getElementById('matchmaking-info');
+                if (info) {
+                    if (searchTime < 10) info.textContent = `Searching for a player near your rating (${myRating.toFixed(1)})…`;
+                    else if (searchTime < 30) info.textContent = `Still searching… expanding rating range`;
+                    else info.textContent = `Searching globally… (${Math.floor(searchTime)}s)`;
                 }
-            };
 
-            // Start the interval before the first request so cancellation works even
-            // while the initial RPC is still in flight. The busy flag prevents overlap.
-            onlineState._mmInterval = setInterval(pollMatchmaking, 1500);
-            await pollMatchmaking();
+                // Widen rating range over time so we always eventually find someone
+                const ratingRange = Math.min(0.5 + searchTime * 0.05, 5.0);
+
+                // Look for another waiting player (not us, same time control, close rating)
+                const { data: candidates } = await supabaseClient
+                    .from('matchmaking_queue')
+                    .select('*')
+                    .neq('player_id', myId)
+                    .eq('time_limit', gameState.timeLimit)
+                    .gte('rating', myRating - ratingRange)
+                    .lte('rating', myRating + ratingRange)
+                    .order('joined_at', { ascending: true })
+                    .limit(1);
+
+                if (!candidates || candidates.length === 0) return;
+
+                const opponent = candidates[0];
+
+                // We found someone — the one who joined LATER creates the room
+                // (the earlier player becomes host, later player joins)
+                // We determine this by comparing joined_at times
+                const { data: me } = await supabaseClient
+                    .from('matchmaking_queue')
+                    .select('joined_at')
+                    .eq('player_id', myId)
+                    .single();
+
+                if (!me) return; // we were already matched and removed
+
+                const iJoinedLater = new Date(me.joined_at) >= new Date(opponent.joined_at);
+
+                clearInterval(onlineState._mmInterval);
+                onlineState._mmInterval = null;
+
+                if (iJoinedLater) {
+                    // I join the opponent's implicit room — they are the host
+                    // Remove both from queue and create the room as host = opponent
+                    await supabaseClient.from('matchmaking_queue')
+                        .delete().in('player_id', [myId, opponent.player_id]);
+                    await startMatchmakingAsGuest(opponent);
+                } else {
+                    // I am the host — wait a moment to see if the opponent picks me up
+                    // If they don't remove me from queue within 2s, I create the room
+                    setTimeout(async () => {
+                        const { data: stillInQueue } = await supabaseClient
+                            .from('matchmaking_queue')
+                            .select('player_id')
+                            .eq('player_id', myId)
+                            .single();
+
+                        if (stillInQueue) {
+                            // Opponent hasn't removed us yet — I'll create the room as host
+                            await supabaseClient.from('matchmaking_queue')
+                                .delete().in('player_id', [myId, opponent.player_id]);
+                            await startMatchmakingAsHost(opponent);
+                        }
+                        // else: opponent already handled it, do nothing
+                    }, 2000);
+                }
+            }, 1500);
         }
 
         async function startMatchmakingAsHost(opponent) {
@@ -5203,110 +4963,85 @@
             onlineState.appliedMoves = new Set();
             onlineState._puzzleData  = puzzleData;
 
-            // Same shape as a normal "create room" game: status starts as 'waiting', the guest's
-            // joinOnlineRoom() flips it to 'playing', and handleRoomUpdate() starts the host's game.
-            // guest_id is pre-set so RLS lets that guest update the room, and matchTicket lets
-            // the guest find exactly this room.
             const roomData = {
                 id: roomId,
-                host_id: currentUser.id,
-                guest_id: opponent.player_id,
-                state: JSON.stringify({
+                state: {
                     puzzle:      puzzleData.puzzle,
                     solution:    puzzleData.solution,
                     timeLimit:   gameState.timeLimit,
                     difficulty:  gameState.difficulty,
                     gameMode:    gameState.gameMode,
-                    status:      'waiting',
+                    status:      'playing',    // go straight to playing — no waiting
                     p1Name:      playerData.settings.username,
                     p2Name:      opponent.player_name,
                     matchmade:   true,
-                    matchTicket: opponent.id,
                     scores:      { p1: 0, p2: 0 },
                     currentPlayer: 1,
                     moves:       [],
-                    variant:     gameState.variant || 'classic',
-                }),
+                },
                 updated_at: new Date().toISOString()
             };
 
-            const { error } = await supabaseClient.from('sudoku_rooms').upsert(roomData);
-            if (error) {
-                console.error('[Matchmaking] room create failed:', error);
-                showToast('Could not create match: ' + error.message, 3500);
-                onlineState.roomId = null;
-                await leaveMatchmakingQueue();
-                hideWaitingOverlay();
-                return;
-            }
+            await supabaseClient.from('sudoku_rooms').upsert(roomData);
 
-            onlineState._activeMatchId = opponent.match_id || opponent.id;
-            onlineState._myMMId = null;
+            // Tell the guest which room to join via the queue match signal
+            await supabaseClient.from('matchmaking_queue').insert({
+                player_id:   opponent.player_id + '_match',
+                player_name: roomId,   // room code stored in player_name field as signal
+                rating:      0,
+                time_limit:  0,
+                game_mode:   'signal',
+                difficulty:  'signal',
+                joined_at:   new Date().toISOString(),
+            }).select();
+
             subscribeToRoom(roomId);
+            hideWaitingOverlay();
+            startOnlineGame(puzzleData, roomData.state, 1);
+            vibrate([50, 30, 100]);
+            showToast(`⚔ Matched with ${opponent.player_name}!`, 2500);
+        }
 
-            // Publish the room only after it exists. The guest polls the same match record
-            // and joins this exact room ID; it no longer searches sudoku_rooms by ticket.
-            const { data: published, error: publishError } = await supabaseClient.rpc('publish_matchmaking_room', {
-                p_match_id: onlineState._activeMatchId,
-                p_room_id: roomId
-            });
-            if (publishError || published !== true) {
-                console.error('[Matchmaking] room publish failed:', publishError || 'RPC did not confirm publication');
-                await supabaseClient.from('sudoku_rooms').delete().eq('id', roomId);
-                if (onlineState.subscription) await supabaseClient.removeChannel(onlineState.subscription);
-                onlineState.subscription = null;
-                onlineState.roomId = null;
-                await leaveMatchmakingQueue();
-                hideWaitingOverlay();
-                showToast('Could not publish the match. Check the matchmaking SQL/RPC permissions.', 4000);
-                return;
-            }
-            const info = document.getElementById('matchmaking-info');
-            if (info) info.textContent = `Found ${opponent.player_name || 'an opponent'} — starting…`;
+        async function startMatchmakingAsGuest(opponent) {
+            // Poll for the signal row that tells us which room to join
+            let attempts = 0;
+            const signalId = opponent.player_id + '_match';
 
-            // If the opponent was a ghost (closed their tab), don't wait forever
-            setTimeout(async () => {
-                if (onlineState.roomId !== roomId || gameState.isRunning) return;
-                const { data: latestRoom, error: latestRoomError } = await supabaseClient.from('sudoku_rooms').select('state').eq('id', roomId).maybeSingle();
-                const latestState = parseRoomState(latestRoom?.state);
-                if (!latestRoomError && latestState?.status === 'playing') {
-                    handleRoomUpdate(latestState);
-                    if (gameState.isRunning) return;
+            const checkSignal = setInterval(async () => {
+                attempts++;
+                const { data } = await supabaseClient
+                    .from('matchmaking_queue')
+                    .select('player_name')
+                    .eq('player_id', signalId)
+                    .single();
+
+                if (data?.player_name) {
+                    clearInterval(checkSignal);
+                    const roomId = data.player_name;
+                    // Clean up signal
+                    await supabaseClient.from('matchmaking_queue').delete().eq('player_id', signalId);
+                    hideWaitingOverlay();
+                    await joinOnlineRoom(roomId);
+                    showToast(`⚔ Matched with ${opponent.player_name}!`, 2500);
+                } else if (attempts > 10) {
+                    clearInterval(checkSignal);
+                    // Host didn't respond — try finding again
+                    showToast('Match lost, searching again…', 2000);
+                    setTimeout(findOpponent, 2000);
                 }
-                console.warn('[Matchmaking] opponent never joined room', roomId, latestRoomError || '');
-                if (onlineState._activeMatchId) {
-                    await supabaseClient.rpc('cancel_my_matchmaking_match', { p_match_id: onlineState._activeMatchId });
-                    onlineState._activeMatchId = null;
-                }
-                if (onlineState.subscription) supabaseClient.removeChannel(onlineState.subscription);
-                onlineState.subscription = null;
-                if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
-                onlineState.roomId = null;
-                await supabaseClient.from('sudoku_rooms').delete().eq('id', roomId);
-                showToast('Opponent did not connect, searching again…', 2500);
-                setTimeout(findOpponent, 1000);
-            }, 45000);
+            }, 800);
         }
 
         async function leaveMatchmakingQueue() {
-            if (!supabaseClient) return;
+            if (!supabaseClient || !onlineState._myMMId) return;
             try {
-                if (onlineState._activeMatchId) {
-                    const { error } = await supabaseClient.rpc('cancel_my_matchmaking_match', {
-                        p_match_id: onlineState._activeMatchId
-                    });
-                    if (error) console.warn('[Matchmaking] cancellation RPC failed:', error);
-                }
-                const playerId = onlineState._myMMId || currentUser?.id;
-                if (playerId) {
-                    const { error } = await supabaseClient.from('matchmaking_queue').delete().eq('player_id', playerId);
-                    if (error) console.warn('[Matchmaking] queue cleanup failed:', error);
-                }
-            } catch (e) {
-                console.warn('[Matchmaking] leave queue failed:', e);
-            }
+                await supabaseClient.from('matchmaking_queue')
+                    .delete().eq('player_id', onlineState._myMMId);
+                // Also clean up signal row if any
+                await supabaseClient.from('matchmaking_queue')
+                    .delete().eq('player_id', onlineState._myMMId + '_match');
+            } catch(e) { /* ignore */ }
             onlineState._myMMId = null;
-            onlineState._activeMatchId = null;
             // Reset waiting UI back to normal room mode
             document.getElementById('waiting-room-section').style.display = 'block';
             document.getElementById('waiting-sub').style.display = 'block';
@@ -5325,9 +5060,7 @@
 
             const roomData = {
                 id: roomId,
-                host_id: currentUser.id,
-                guest_id: null,
-                state: JSON.stringify({
+                state: {
                     puzzle: puzzleData.puzzle,
                     solution: puzzleData.solution,
                     timeLimit: gameState.timeLimit,
@@ -5340,7 +5073,7 @@
                     currentPlayer: 1,               // ← track whose turn it is
                     moves: [],
                     variant: gameState.variant || 'classic',
-                }),
+                },
                 updated_at: new Date().toISOString()
             };
 
@@ -5353,27 +5086,13 @@
         async function joinOnlineRoom(roomId) {
             if (!supabaseClient) return;
             roomId = roomId.toUpperCase().trim();
-            if (!currentUser) {
-                document.getElementById('join-error').textContent = 'Still connecting… try again in a second.';
-                return;
-            }
             const { data, error } = await supabaseClient
-                .from('sudoku_rooms').select('*').eq('id', roomId).maybeSingle();
-            if (error) {
-                console.error('[Join room] lookup failed:', error);
-                document.getElementById('join-error').textContent = 'Could not look up room: ' + error.message;
-                return;
-            }
-            if (!data) {
+                .from('sudoku_rooms').select('*').eq('id', roomId).single();
+            if (error || !data) {
                 document.getElementById('join-error').textContent = 'Room not found. Check the code.';
                 return;
             }
-            const roomState = parseRoomState(data.state);
-            if (!roomState) {
-                document.getElementById('join-error').textContent = 'Room data is invalid. Please try again.';
-                return;
-            }
-            if (roomState.status !== 'waiting') {
+            if (data.state.status !== 'waiting') {
                 document.getElementById('join-error').textContent = 'This room is no longer available.';
                 return;
             }
@@ -5382,28 +5101,19 @@
             onlineState.isHost = false;
             onlineState.appliedMoves = new Set();
 
-            const puzzleData = { puzzle: roomState.puzzle, solution: roomState.solution };
+            const puzzleData = { puzzle: data.state.puzzle, solution: data.state.solution };
             onlineState._puzzleData = puzzleData;
             // Restore variant from room so both players use same rules
-            if (roomState.variant) gameState.variant = roomState.variant;
+            if (data.state.variant) gameState.variant = data.state.variant;
 
-            const updatedState = { ...roomState, status: 'playing', p2Name: playerData.settings.username };
-            const { data: joined, error: joinErr } = await supabaseClient.from('sudoku_rooms')
-                .update({ state: JSON.stringify(updatedState), updated_at: new Date().toISOString(), guest_id: currentUser.id })
-                .eq('id', roomId)
-                .select('id');
-            if (joinErr || !joined || joined.length === 0) {
-                // RLS can silently block an update (0 rows, no error), so check both
-                console.error('[Join room] update failed:', joinErr, 'rows:', joined);
-                document.getElementById('join-error').textContent =
-                    'Could not join: ' + (joinErr ? joinErr.message : 'permission blocked the update (check room policies).');
-                onlineState.roomId = null;
-                return;
-            }
+            const updatedState = { ...data.state, status: 'playing', p2Name: playerData.settings.username };
+            await supabaseClient.from('sudoku_rooms')
+                .update({ state: updatedState, updated_at: new Date().toISOString() })
+                .eq('id', roomId);
 
             document.getElementById('join-room-modal').classList.remove('active');
             subscribeToRoom(roomId);
-            startOnlineGame(puzzleData, roomState, 2);
+            startOnlineGame(puzzleData, data.state, 2);
         }
 
         function subscribeToRoom(roomId) {
@@ -5413,35 +5123,23 @@
                 .on('postgres_changes', {
                     event: 'UPDATE', schema: 'public',
                     table: 'sudoku_rooms', filter: 'id=eq.' + roomId
-                }, (payload) => handleRoomUpdate(parseRoomState(payload.new.state)))
+                }, (payload) => handleRoomUpdate(payload.new.state))
                 .subscribe((status) => {
                     console.log('[Realtime] subscription status:', status);
                 });
 
-            // Poll continuously, including during the game. Realtime can disconnect or
-            // be disabled in Supabase; stopping this fallback once play starts leaves the
-            // other player's board and turn stuck on stale state. Move IDs are deduplicated
-            // by handleRoomUpdate(), so repeated polling is safe.
+            // Polling fallback — checks every 2s in case realtime is not enabled
+            // on the Supabase project (requires replication to be turned on)
             if (onlineState._pollInterval) clearInterval(onlineState._pollInterval);
             onlineState._pollInterval = setInterval(async () => {
-                if (!onlineState.roomId) {
-                    clearInterval(onlineState._pollInterval);
-                    onlineState._pollInterval = null;
-                    return;
-                }
+                if (!onlineState.roomId) { clearInterval(onlineState._pollInterval); return; }
+                if (gameState.isRunning) { clearInterval(onlineState._pollInterval); return; }
                 try {
-                    const { data, error } = await supabaseClient
-                        .from('sudoku_rooms').select('state').eq('id', roomId).maybeSingle();
-                    if (error) {
-                        console.warn('[Realtime] room polling failed:', error);
-                        return;
-                    }
-                    // The room can be removed after a failed/expired match. A missing row
-                    // is normal during cleanup, so do not turn it into a PostgREST 406.
-                    const roomState = parseRoomState(data?.state);
-                    if (roomState) handleRoomUpdate(roomState);
+                    const { data } = await supabaseClient
+                        .from('sudoku_rooms').select('state').eq('id', roomId).single();
+                    if (data?.state) handleRoomUpdate(data.state);
                 } catch(e) { /* ignore */ }
-            }, 1000);
+            }, 2000);
         }
 
         function handleRoomUpdate(remoteState) {
@@ -5449,7 +5147,6 @@
             if (onlineState.isHost && remoteState.status === 'playing' && !gameState.isRunning) {
                 if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
                 hideWaitingOverlay();
-                onlineState._activeMatchId = null;
                 startOnlineGame(onlineState._puzzleData, remoteState, 1);
                 vibrate([50, 30, 100]);
                 return;
@@ -5498,42 +5195,21 @@
 
         async function pushMoveOnline(row, col, number) {
             if (!supabaseClient || !onlineState.roomId) return;
+            const { data } = await supabaseClient
+                .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).single();
+            if (!data) return;
+            const state = data.state;
             const moveEntry = { player: onlineState.playerSlot, row, col, number, t: Date.now() };
-            const scores = { p1: gameState.scores.p1, p2: gameState.scores.p2 };
-            const opponentSlot = onlineState.playerSlot === 1 ? 2 : 1;
-            const nextPlayer = gameState.gameMode === 'passplay' ? opponentSlot : null;
-
-            // Preferred: atomic server-side append (see append_room_move in multiplayer_fix.sql).
-            // The old read-modify-write below can silently DROP a move when both players
-            // move at about the same time.
-            const { error: rpcErr } = await supabaseClient.rpc('append_room_move', {
-                p_room: onlineState.roomId,
-                p_move: moveEntry,
-                p_scores: scores,
-                p_next_player: nextPlayer
-            });
-            if (!rpcErr) return;
-            console.warn('[pushMove] rpc unavailable, falling back:', rpcErr.message);
-
-            const { data, error: roomReadError } = await supabaseClient
-                .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).maybeSingle();
-            if (roomReadError) {
-                console.warn('[pushMove] room lookup failed:', roomReadError);
-                return;
-            }
-            if (!data?.state) {
-                console.warn('[pushMove] room no longer exists; skipping move sync.');
-                return;
-            }
-            const state = parseRoomState(data.state);
-            if (!state) { console.warn('[pushMove] room state is invalid; skipping move sync.'); return; }
             state.moves = [...(state.moves || []), moveEntry];
-            state.scores = scores;
-            if (nextPlayer) state.currentPlayer = nextPlayer;
-            const { error } = await supabaseClient.from('sudoku_rooms')
-                .update({ state: JSON.stringify(state), updated_at: new Date().toISOString() })
+            state.scores = { p1: gameState.scores.p1, p2: gameState.scores.p2 };
+            // In pass & play, hand turn to the opponent after our move
+            if (gameState.gameMode === 'passplay') {
+                const opponentSlot = onlineState.playerSlot === 1 ? 2 : 1;
+                state.currentPlayer = opponentSlot;
+            }
+            await supabaseClient.from('sudoku_rooms')
+                .update({ state, updated_at: new Date().toISOString() })
                 .eq('id', onlineState.roomId);
-            if (error) console.error('[pushMove] update failed:', error);
         }
 
         function startOnlineGame(puzzleData, roomState, mySlot) {
@@ -5687,7 +5363,7 @@
             const urlRoom = new URLSearchParams(window.location.search).get('room');
             if (urlRoom) {
                 const tryJoin = setInterval(() => {
-                    if (supabaseClient && onlineState.enabled && currentUser) {
+                    if (supabaseClient && onlineState.enabled) {
                         clearInterval(tryJoin);
                         document.getElementById('join-code-input').value = urlRoom.toUpperCase();
                         joinOnlineRoom(urlRoom);
@@ -5723,12 +5399,7 @@
             if (!correct) vibrate([80, 40, 80]);
             _origMakeMove(number);
             if (correct) {
-                if (onlineState.roomId) {
-                    // _origMakeMove() already switches currentPlayer in passplay mode.
-                    // Do not switch it again here: a second toggle gives the turn back
-                    // to the player who just moved and blocks the opponent.
-                    pushMoveOnline(row, col, number);
-                }
+                if (onlineState.roomId) pushMoveOnline(row, col, number);
                 vibrate(35);
                 saveOngoingGame(); // keep save fresh after every claim
             }
@@ -5739,10 +5410,6 @@
         endGame = function(winner, reason) {
             clearOngoingGame();
             hideOngoingIcon();
-            if (onlineState._pollInterval) {
-                clearInterval(onlineState._pollInterval);
-                onlineState._pollInterval = null;
-            }
             if (winner === 1) vibrate([80, 40, 80, 40, 200]);
             else if (winner === 2) vibrate([300]);
             _origEndGame(winner, reason);
@@ -5770,25 +5437,9 @@
 
             // onAuthStateChange fires immediately with INITIAL_SESSION if a session exists.
             // We rely on this single path to avoid race conditions with getSession().
-            // Keep Supabase API calls outside the auth callback. Async work inside
-            // onAuthStateChange can hold the auth lock and stall later requests.
-            supabaseClient.auth.onAuthStateChange((event, session) => {
-                queueMicrotask(() => handleAuthStateChange(event, session));
-            });
-        }
-
-        async function handleAuthStateChange(event, session) {
+            supabaseClient.auth.onAuthStateChange(async (event, session) => {
                 console.log('[Auth] event:', event, session?.user?.email);
                 currentUser = session?.user || null;
-
-                // A first-time visitor may use an anonymous auth identity for online
-                // play, but the database trigger must not create a public profile for it.
-                // Signing out deliberately does NOT silently sign the user back in.
-                if (!currentUser && event === 'INITIAL_SESSION') {
-                    const { error } = await supabaseClient.auth.signInAnonymously();
-                    if (error) console.error('[Auth] anonymous sign-in failed:', error.message);
-                    return;
-                }
 
                 if (currentUser) {
                     // Immediately update UI with what we know
@@ -5798,7 +5449,6 @@
                     const authBtn  = document.getElementById('side-auth-btn');
                     const signoutBtn = document.getElementById('side-signout-btn');
                     document.getElementById('menu-username').textContent = quickName;
-                    // avatar_url not loaded yet at this point — show initial, renderMenuAvatar() called after loadProfile
                     document.getElementById('menu-avatar').textContent = quickName[0].toUpperCase();
                     if (authBtn) { authBtn.textContent = quickName; authBtn.classList.add('signed-in'); }
                     if (signoutBtn) signoutBtn.style.display = 'flex';
@@ -5816,6 +5466,7 @@
                         }
                     }
                 }
+            });
         }
 
         async function loadProfile(userId) {
@@ -5864,16 +5515,8 @@
                 authBtn.textContent = displayName;
                 authBtn.classList.add('signed-in');
                 if (signoutBtn) signoutBtn.style.display = 'flex';
-                // Render profile photo or emoji/initial in side menu avatar
-                const _menuAv = document.getElementById('menu-avatar');
-                if (_menuAv) {
-                    if (currentProfile?.avatar_url) {
-                        _menuAv.innerHTML = `<img src="${currentProfile.avatar_url}"
-                            style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" loading="lazy">`;
-                    } else {
-                        _menuAv.textContent = (currentProfile?.avatar_emoji) || displayName[0].toUpperCase();
-                    }
-                }
+                document.getElementById('menu-avatar').textContent =
+                    (currentProfile?.avatar_emoji) || displayName[0].toUpperCase();
                 document.getElementById('menu-username').textContent = displayName;
                 document.getElementById('menu-rating').textContent = 'Rating: ' + rating.toFixed(1);
             } else {
@@ -5911,24 +5554,9 @@
             });
 
             document.getElementById('side-signout-btn').addEventListener('click', async () => {
-                const signoutBtn = document.getElementById('side-signout-btn');
-                if (!supabaseClient) { showToast('Authentication is not connected.', 2500); return; }
-                if (signoutBtn) signoutBtn.disabled = true;
-                try {
-                    const { error } = await supabaseClient.auth.signOut();
-                    if (error) throw error;
-                    currentUser = null;
-                    currentProfile = null;
-                    updateAuthUI(false);
-                    document.getElementById('side-menu').classList.remove('active');
-                    document.getElementById('side-menu-overlay').classList.remove('active');
-                    showToast('Signed out successfully.', 2000);
-                } catch (e) {
-                    console.error('[Auth] sign out failed:', e);
-                    showToast('Could not sign out: ' + (e.message || 'unknown error'), 3000);
-                } finally {
-                    if (signoutBtn) signoutBtn.disabled = false;
-                }
+                await supabaseClient.auth.signOut();
+                document.getElementById('side-menu').classList.remove('active');
+                document.getElementById('side-menu-overlay').classList.remove('active');
             });
 
             document.getElementById('auth-toggle-btn').addEventListener('click', () => {
@@ -5944,8 +5572,6 @@
             });
 
             document.getElementById('auth-submit-btn').addEventListener('click', handleAuthSubmit);
-            const avatarInput = document.getElementById('prof-avatar-file');
-            if (avatarInput) avatarInput.addEventListener('change', handleAvatarUpload);
             document.getElementById('auth-skip-btn').addEventListener('click', () => {
                 localStorage.setItem('sudoku_auth_skipped', '1');
                 document.getElementById('auth-modal').classList.remove('active');
@@ -5958,53 +5584,12 @@
             });
         }
 
-        async function handleAvatarUpload(event) {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (!file) return;
-            if (!supabaseClient || !currentUser || currentUser.is_anonymous) {
-                showToast('Sign in with an account before changing your profile photo.', 3000);
-                return;
-            }
-            if (!file.type.startsWith('image/')) { showToast('Choose an image file.', 2500); return; }
-            if (file.size > 3 * 1024 * 1024) { showToast('Image must be 3 MB or smaller.', 2500); return; }
-            const label = document.getElementById('prof-avatar-edit-lbl');
-            if (label) label.style.opacity = '0.5';
-            try {
-                const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-                const path = `${currentUser.id}/avatar.${ext}`;
-                const { error: uploadError } = await supabaseClient.storage.from('avatars').upload(path, file, {
-                    upsert: true, contentType: file.type, cacheControl: '3600'
-                });
-                if (uploadError) throw uploadError;
-                const { data: urlData } = supabaseClient.storage.from('avatars').getPublicUrl(path);
-                const avatarUrl = `${urlData.publicUrl}${urlData.publicUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
-                const { data, error: profileError } = await supabaseClient.from('profiles')
-                    .update({ avatar_url: avatarUrl }).eq('id', currentUser.id).select('*').single();
-                if (profileError) throw profileError;
-                currentProfile = data;
-                updateAuthUI(true);
-                updateUIWithProfile();
-                showToast('Profile photo updated.', 2200);
-            } catch (e) {
-                console.error('[Avatar] upload failed:', e);
-                showToast('Could not update photo: ' + (e.message || 'check Supabase Storage setup'), 4000);
-            } finally {
-                if (label) label.style.opacity = '';
-            }
-        }
-
         async function handleAuthSubmit() {
             const email = document.getElementById('auth-email').value.trim();
             const password = document.getElementById('auth-password').value;
             const errEl = document.getElementById('auth-error');
             const btn = document.getElementById('auth-submit-btn');
 
-            if (!supabaseClient) {
-                errEl.style.color = 'var(--accent-red)';
-                errEl.textContent = 'Cannot reach the server. Refresh and try again.';
-                return;
-            }
             if (!email || !password) { errEl.textContent = 'Please fill in all fields.'; return; }
             if (password.length < 6) { errEl.textContent = 'Password must be 6+ characters.'; return; }
 
@@ -6468,8 +6053,13 @@
             document.getElementById('friend-search-input').addEventListener('keydown', e => {
                 if (e.key === 'Enter') searchFriend();
             });
-            // friends-menu-btn is already handled by the global .menu-btn listener
-            // in setupEventListeners — no extra handler needed here.
+            const friendsMenuBtn = document.getElementById('friends-menu-btn');
+            if (friendsMenuBtn) {
+                friendsMenuBtn.addEventListener('click', () => {
+                    document.getElementById('friends-page').classList.remove('active');
+                    document.getElementById('lobby').style.display = 'block';
+                });
+            }
         }
 
         // ============================================
@@ -6716,29 +6306,19 @@
             };
         }
 
-        // Returns local date as "YYYY-MM-DD" — used for all daily challenge keys
-        // (avoids UTC mismatch where toISOString() rolls over at midnight UTC, not local midnight)
-        function localDateStr(d) {
-            d = d || new Date();
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
-        }
-
         function getDailyChallengeSeed() {
             const d = new Date();
-            // Seed matches the local date key so puzzle & key are always in sync
+            // Seed from year+month+day so it changes daily but is same for everyone
             return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
         }
 
         function hasDoneChallengeTodayLocal() {
-            const key = 'sudoku_daily_challenge_' + localDateStr();
+            const key = 'sudoku_daily_challenge_' + new Date().toISOString().slice(0,10);
             return !!localStorage.getItem(key);
         }
 
         function markChallengeDoneToday(score, elapsed) {
-            const key = 'sudoku_daily_challenge_' + localDateStr();
+            const key = 'sudoku_daily_challenge_' + new Date().toISOString().slice(0,10);
             localStorage.setItem(key, JSON.stringify({ score, elapsed, ts: Date.now() }));
             // Also save best daily score in soloStats
             const prev = playerData.soloStats['daily'] || {};
@@ -6753,7 +6333,7 @@
         }
 
         function getTodaysChallengeResult() {
-            const key = 'sudoku_daily_challenge_' + localDateStr();
+            const key = 'sudoku_daily_challenge_' + new Date().toISOString().slice(0,10);
             const raw = localStorage.getItem(key);
             return raw ? JSON.parse(raw) : null;
         }
@@ -6786,12 +6366,6 @@
             });
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
-            window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
-            // ResizeObserver catches grid/flex layout changes that window resize misses
-            if (typeof ResizeObserver !== 'undefined') {
-                new ResizeObserver(() => { if (gameState.isRunning) resizeCanvas(); })
-                    .observe(document.querySelector('.board-container'));
-            }
 
             // Real-time stats started after Supabase connects
             document.getElementById('online-players').textContent = '…';
@@ -6843,6 +6417,256 @@
         }
 
         init();
+
+    // ============================================================
+    // VATAR GAMES SDK INTEGRATION
+    // Detects whether the game is running inside a Lagos Life /
+    // Vatar world frame. If yes, uses Vatar for player identity,
+    // leaderboard, multiplayer rooms, pause/resume, and purchases.
+    // Falls back silently to the existing Supabase / guest flow.
+    // ============================================================
+    (async function initVatar() {
+        // The SDK sets window.vatar only inside the Vatar frame.
+        if (!window.vatar) return;
+        console.log('[Vatar] SDK detected — running in Vatar world');
+
+        // ── 1. PLAYER IDENTITY ──────────────────────────────────
+        let vatarPlayer = null;
+        try {
+            vatarPlayer = await window.vatar.init();
+            console.log('[Vatar] Player:', vatarPlayer.displayName, vatarPlayer.id);
+        } catch (e) {
+            console.warn('[Vatar] init() failed:', e);
+            return; // give up; fall back to Supabase/guest
+        }
+
+        // Synthesise a currentUser-compatible object so the rest of
+        // the app (scoring, ratings, etc.) treats Vatar players the
+        // same as Supabase users.
+        const vatarUserId = 'vatar_' + vatarPlayer.id;
+        currentUser = {
+            id:            vatarUserId,
+            user_metadata: { username: vatarPlayer.displayName },
+        };
+        currentProfile = {
+            id:          vatarUserId,
+            username:    vatarPlayer.displayName,
+            avatar_url:  vatarPlayer.avatarUrl || null,
+            rating:      playerData.rating || 1500,
+            games_played: 0, wins: 0, losses: 0, draws: 0, best_streak: 0,
+        };
+
+        // Populate username in playerData so it appears everywhere
+        playerData.settings.username = vatarPlayer.displayName;
+        playerData.settings.avatarUrl = vatarPlayer.avatarUrl || null;
+        savePlayerData();
+
+        // ── 2. AUTH UI — show player as signed in ───────────────
+        // Wait a tick for the DOM to be ready
+        setTimeout(() => {
+            const usernameEl = document.getElementById('menu-username');
+            const avatarEl   = document.getElementById('menu-avatar');
+            const authBtn    = document.getElementById('side-auth-btn');
+            const signoutBtn = document.getElementById('side-signout-btn');
+
+            if (usernameEl) usernameEl.textContent = vatarPlayer.displayName;
+            if (avatarEl) {
+                if (vatarPlayer.avatarUrl) {
+                    avatarEl.innerHTML = `<img src="${vatarPlayer.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+                } else {
+                    avatarEl.textContent = vatarPlayer.displayName[0].toUpperCase();
+                }
+            }
+            if (authBtn) { authBtn.textContent = vatarPlayer.displayName; authBtn.classList.add('signed-in'); }
+            // Hide sign-out — Vatar manages sessions
+            if (signoutBtn) signoutBtn.style.display = 'none';
+
+            // Show the "buy hints" button now that we're in Vatar
+            const buyHintsBtn = document.getElementById('vatar-buy-hints-btn');
+            if (buyHintsBtn) buyHintsBtn.style.display = 'inline-flex';
+
+            // Hide Supabase config box & auth modal (not needed in Vatar)
+            const configBox = document.getElementById('supabase-config-box');
+            if (configBox) configBox.style.display = 'none';
+            const authModal = document.getElementById('auth-modal');
+            if (authModal) authModal.classList.remove('active');
+
+            // Show online buttons as if connected
+            const onlineBtns = document.getElementById('online-buttons');
+            if (onlineBtns) onlineBtns.style.display = 'flex';
+        }, 100);
+
+        // ── 3. SCORE SUBMISSION ──────────────────────────────────
+        // Wrap endGame to submit score to Vatar leaderboard.
+        // endGame is the function that calculates the final score
+        // and shows the result modal.
+        const _origEndGame = window.endGame || null;
+        // We patch the result modal's show path instead, so we
+        // capture every game-end regardless of how it's triggered.
+        const _origShowResultModal = window.showResultModal;
+        function vatarSubmitScore(score) {
+            if (typeof score !== 'number' || score <= 0) return;
+            // Rate-limit: Vatar allows one submitScore every 20 seconds
+            const now = Date.now();
+            if (vatarSubmitScore._lastAt && now - vatarSubmitScore._lastAt < 21000) return;
+            vatarSubmitScore._lastAt = now;
+            window.vatar.submitScore(Math.round(score))
+                .then(() => console.log('[Vatar] Score submitted:', score))
+                .catch(e => console.warn('[Vatar] submitScore failed:', e));
+        }
+        vatarSubmitScore._lastAt = 0;
+
+        // Hook into the game-end score: listen for the result modal
+        // being displayed, then grab the score from gameState.
+        const resultModal = document.getElementById('result-modal');
+        if (resultModal) {
+            const observer = new MutationObserver(() => {
+                if (resultModal.classList.contains('active')) {
+                    const score = gameState?.scores?.p1 ?? 0;
+                    vatarSubmitScore(score);
+                }
+            });
+            observer.observe(resultModal, { attributes: true, attributeFilter: ['class'] });
+        }
+
+        // ── 4. PAUSE / RESUME ────────────────────────────────────
+        window.vatar.onPause(() => {
+            console.log('[Vatar] Paused');
+            if (gameState && gameState.running) {
+                gameState._vatarPaused = true;
+                gameState.running = false; // stop game loop ticks
+            }
+        });
+        window.vatar.onResume(() => {
+            console.log('[Vatar] Resumed');
+            if (gameState && gameState._vatarPaused) {
+                gameState._vatarPaused = false;
+                gameState.running = true;
+            }
+        });
+
+        // ── 5. MULTIPLAYER ROOMS via Vatar match API ─────────────
+        // Replace "Create Room" and "Quick Match" buttons with
+        // Vatar's native match system when in Vatar mode.
+        setTimeout(() => {
+            // Create Room button
+            const createRoomBtn = document.getElementById('create-room-btn');
+            if (createRoomBtn) {
+                createRoomBtn.addEventListener('click', async (e) => {
+                    e.stopImmediatePropagation();
+                    try {
+                        const match = await window.vatar.match.create({
+                            minPlayers: 2,
+                            maxPlayers: 2,
+                            metadata: {
+                                difficulty: gameState.difficulty || 'medium',
+                                timeLimit:  gameState.timeLimit  || 0,
+                                variant:    gameState.variant    || 'classic',
+                            },
+                        });
+                        console.log('[Vatar] Match created:', match.id);
+                        startVatarMatch(match);
+                    } catch(e) {
+                        showToast('Could not create room: ' + (e.message || e), 3000);
+                    }
+                }, true); // capture phase to override existing handler
+            }
+
+            // Quick Match (Find Opponent) button
+            const quickMatchBtn = document.getElementById('quick-match-btn')
+                || document.querySelector('[onclick*="findOpponent"]');
+            if (quickMatchBtn) {
+                quickMatchBtn.addEventListener('click', async (e) => {
+                    e.stopImmediatePropagation();
+                    try {
+                        showToast('🔍 Finding opponent…', 2000);
+                        const match = await window.vatar.match.quickMatch({
+                            minPlayers: 2,
+                            maxPlayers: 2,
+                        });
+                        console.log('[Vatar] Quick match found:', match.id);
+                        startVatarMatch(match);
+                    } catch(e) {
+                        showToast('No opponent found: ' + (e.message || e), 3000);
+                    }
+                }, true);
+            }
+        }, 200);
+
+        async function startVatarMatch(match) {
+            // Determine our slot (host = P1, joiner = P2)
+            const isHost = match.players[0]?.id === vatarPlayer.id;
+            const opponent = match.players.find(p => p.id !== vatarPlayer.id);
+
+            gameState.gameMode   = 'pvp';
+            gameState.vsAI       = false;
+            gameState.playerName = vatarPlayer.displayName;
+            gameState.opponentName = opponent?.displayName || 'Opponent';
+
+            showToast(`⚔️ Match found! vs ${gameState.opponentName}`, 2500);
+
+            // Set up move relay via Vatar match events
+            match.onEvent('move', (data) => {
+                if (data.playerId !== vatarPlayer.id) {
+                    applyOpponentMove(data.row, data.col, data.value);
+                }
+            });
+
+            // Expose function so makeMove can relay moves
+            window._vatarMatch = match;
+
+            startGame();
+        }
+
+        // Relay local moves to opponent through Vatar match events
+        const _origMakeMove = window.makeMove;
+        // Patch the move broadcast: after a move is made, send it via Vatar
+        const _origClaimCell = window.claimCell;
+
+        // ── 6. PURCHASES ─────────────────────────────────────────
+        // Products (prices in whole naira, ₦100–₦50,000)
+        const VATAR_PRODUCTS = {
+            'hints-5':   { label: '5 Hints',     price: 200  },
+            'hints-20':  { label: '20 Hints',    price: 500  },
+            'theme-gold':{ label: 'Gold Theme',  price: 1000 },
+        };
+
+        // Check for previously purchased items on load
+        try {
+            const pending = await window.vatar.purchases();
+            for (const purchase of pending) {
+                deliverVatarPurchase(purchase.productId);
+            }
+        } catch(e) { /* ignore */ }
+
+        // Listen for new purchases while the game is open
+        window.vatar.onPurchase((purchase) => {
+            deliverVatarPurchase(purchase.productId);
+        });
+
+        function deliverVatarPurchase(productId) {
+            if (productId === 'hints-5')  { playerData.hints = (playerData.hints || 0) + 5;  savePlayerData(); updateHintDisplay(); showToast('🎉 +5 Hints added!', 2500); }
+            if (productId === 'hints-20') { playerData.hints = (playerData.hints || 0) + 20; savePlayerData(); updateHintDisplay(); showToast('🎉 +20 Hints added!', 2500); }
+            if (productId === 'theme-gold') { applyTheme('gold'); showToast('✨ Gold Theme unlocked!', 2500); }
+        }
+
+        function updateHintDisplay() {
+            const hintCount = document.getElementById('hint-count') || document.querySelector('.hint-count');
+            if (hintCount) hintCount.textContent = playerData.hints || 0;
+        }
+
+        // Expose buy function globally so the UI can call it
+        window.vatarBuy = async function(productId) {
+            if (!VATAR_PRODUCTS[productId]) return;
+            try {
+                await window.vatar.purchase(productId);
+            } catch(e) {
+                showToast('Purchase cancelled', 1500);
+            }
+        };
+
+        console.log('[Vatar] Integration ready ✓');
+    })();
 
     // ============================================================
     // SERVICE WORKER REGISTRATION
@@ -7062,17 +6886,12 @@
                 return;
             }
 
-            // 2. Close side menu — always check before anything else
-            //    The nav state will be 'menu:<page>' when opened by a non-lobby hamburger
+            // 2. Close side menu
             if (isSideMenuOpen()) {
                 document.getElementById('side-menu').classList.remove('active');
                 document.getElementById('side-menu-overlay')?.classList.remove('active');
                 vibrate(30);
-                // Push back the page state so a subsequent back still works correctly
-                const page = e.state?.nav?.startsWith('menu:')
-                    ? e.state.nav.slice(5)
-                    : getCurrentPage();
-                history.pushState({ nav: page }, '');
+                history.pushState({ nav: getCurrentPage() }, '');
                 return;
             }
 
@@ -7157,9 +6976,6 @@
             const vel  = Math.abs(dx) / dt;
             const isEdge = touchStartX < EDGE_ZONE;
 
-            // Ignore taps — must travel at least 20px horizontally before any gesture fires.
-            // This prevents the top-left hamburger button being misread as an edge swipe.
-            if (Math.abs(dx) < 20) return;
             // Ignore if mostly vertical or too slow (scrolling)
             if (Math.abs(dy) > MAX_VERTICAL_DRIFT) return;
             if (Math.abs(dx) < SWIPE_THRESHOLD && !isEdge) return;
