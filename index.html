@@ -211,9 +211,11 @@ create policy "public rw" on sudoku_rooms
 
                 <div id="online-buttons" style="display:flex;flex-direction:column;gap:8px;">
                     <button class="action-btn btn-online" id="find-opponent-btn">⚔ Find Opponent</button>
-                    <div style="display:flex;gap:8px;">
-                        <button class="action-btn btn-secondary" style="flex:1;" id="create-room-btn">🌐 Create Room</button>
-                        <button class="action-btn btn-secondary" style="flex:1;" id="join-room-btn">🔗 Join Code</button>
+                    <!-- Legacy controls remain hidden so older event wiring stays harmless.
+                         All online games start through automatic matchmaking. -->
+                    <div aria-hidden="true" style="display:none;">
+                        <button id="create-room-btn" type="button">Create Room</button>
+                        <button id="join-room-btn" type="button">Join Code</button>
                     </div>
                 </div>
             </div>
@@ -878,8 +880,8 @@ create policy "public rw" on sudoku_rooms
     <!-- Waiting Room Overlay -->
     <div id="waiting-overlay">
         <div class="waiting-spinner"></div>
-        <div class="waiting-title" id="waiting-title">Waiting for opponent…</div>
-        <div id="waiting-room-section">
+        <div class="waiting-title" id="waiting-title">Finding Opponent…</div>
+        <div id="waiting-room-section" style="display:none;">
             <div class="room-code-display">
                 <div class="room-code-label">Room Code</div>
                 <div class="room-code-value" id="waiting-room-code">——</div>
@@ -889,7 +891,7 @@ create policy "public rw" on sudoku_rooms
                 <button class="share-copy-btn" id="share-copy-btn">Copy Link</button>
             </div>
         </div>
-        <div class="waiting-sub" id="waiting-sub">Share the link or room code with your opponent. The game starts automatically when they join.</div>
+        <div class="waiting-sub" id="waiting-sub" style="display:none;">
         <div id="matchmaking-status" style="display:none;">
             <div class="matchmaking-dots">
                 <span></span><span></span><span></span>
@@ -900,7 +902,7 @@ create policy "public rw" on sudoku_rooms
     </div>
 
     <!-- Join Room Modal -->
-    <div class="modal-overlay" id="join-room-modal">
+    <div class="modal-overlay" id="join-room-modal" style="display:none !important;">
         <div class="modal" style="max-width:340px;">
             <div class="modal-header">
                 <div class="modal-icon">🔗</div>
