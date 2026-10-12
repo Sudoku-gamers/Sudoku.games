@@ -1868,7 +1868,7 @@
                 if (activeModal) { activeModal.classList.remove('active'); return; }
                 if (onlineState._mmInterval) { clearInterval(onlineState._mmInterval); onlineState._mmInterval = null; }
                 if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
-                if (onlineState._myMMId && supabaseClient) supabaseClient.from('matchmaking_queue').delete().eq('player_id', onlineState._myMMId);
+                leaveMatchmakingQueue();
                 onlineState._myMMId = null; hideWaitingOverlay(); exitToLobby();
             });
 
@@ -1882,7 +1882,7 @@
                 if (onlineState._mmInterval) { clearInterval(onlineState._mmInterval); onlineState._mmInterval = null; }
                 if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
                 if (onlineState.subscription && supabaseClient) { await supabaseClient.removeChannel(onlineState.subscription); onlineState.subscription = null; }
-                if (onlineState._myMMId && supabaseClient) { await supabaseClient.from('matchmaking_queue').delete().eq('player_id', onlineState._myMMId); onlineState._myMMId = null; }
+                await leaveMatchmakingQueue();
                 hideWaitingOverlay();
                 onlineState.roomId = null;
                 gameState.isRunning = false;
@@ -3990,6 +3990,7 @@
             _pollInterval: null,
             _mmInterval: null,
             _myMMId: null,
+            _activeMatchId: null,
         };
 
         function generateRoomId() {
@@ -5051,140 +5052,116 @@
         // ============================================
         async function findOpponent() {
             if (!supabaseClient) { showToast('Not connected', 1500); return; }
-
-            const myName   = playerData.settings.username || 'Player';
-            const myRating = playerData.rating || 2.0;
             if (!currentUser) { showToast('Still connecting… try again in a second', 1800); return; }
-            const myId     = currentUser.id; // real auth.uid() — anonymous or signed-in
+            if (onlineState._mmInterval) { clearInterval(onlineState._mmInterval); onlineState._mmInterval = null; }
 
-            // Check the table exists first
-            const { error: tableCheck } = await supabaseClient
-                .from('matchmaking_queue').select('player_id').limit(1);
-            if (tableCheck) {
-                console.error('[Matchmaking] Table check failed:', tableCheck);
-                if (tableCheck.code === '42P01' || tableCheck.message?.includes('does not exist')) {
-                    showToast('⚠ Run the matchmaking SQL in Supabase first!', 4000);
-                } else {
-                    showToast('Error: ' + (tableCheck.message || tableCheck.code), 3000);
-                }
-                return;
-            }
+            const myName = playerData.settings.username || 'Player';
+            const myRating = Number(playerData.rating || 2.0);
+            const myId = currentUser.id;
+            let searchTime = 0;
+            let busy = false;
+            let handledMatchId = null;
 
-            // Show searching UI
             document.getElementById('waiting-title').textContent = 'Finding Opponent…';
             document.getElementById('waiting-room-section').style.display = 'none';
             document.getElementById('waiting-sub').style.display = 'none';
             document.getElementById('matchmaking-status').style.display = 'block';
             document.getElementById('waiting-overlay').classList.add('active');
-
-            // Remove any stale entry of mine first
-            await supabaseClient.from('matchmaking_queue').delete().eq('player_id', myId);
-
-            // Add ourselves to the queue. joined_at is left to the DB default (server clock)
-            // so ordering is not affected by differing device clocks. We read back our row id
-            // + joined_at: the id is the "ticket" the host stamps into our room.
-            const { data: myRow, error } = await supabaseClient.from('matchmaking_queue').insert({
-                player_id:   myId,
-                player_name: myName,
-                rating:      myRating,
-                time_limit:  gameState.timeLimit,
-                game_mode:   gameState.gameMode,
-                difficulty:  gameState.difficulty,
-            }).select('id, joined_at').single();
-
-            if (error || !myRow) {
-                console.error('[Matchmaking] Insert error:', error);
-                showToast('Matchmaking error: ' + (error?.message || error?.code || 'unknown'), 3000);
-                hideWaitingOverlay();
-                return;
-            }
-
-            let searchTime = 0;
-            let busy = false;
             onlineState._myMMId = myId;
+            onlineState._activeMatchId = null;
 
-            // Roles are decided by queue order, with NO shared state between the two players:
-            //   - the EARLIER joiner is the host: it sees the later joiner as a candidate and creates the room
-            //   - the LATER joiner is the guest: it just watches for a room created for it
-            // (RLS means a player can only write rows for themselves, so the old
-            //  "host writes a signal row for the other player" approach could never work.)
-            onlineState._mmInterval = setInterval(async () => {
-                if (busy) return;
+            const pollMatchmaking = async () => {
+                if (busy || !onlineState._mmInterval) return;
                 busy = true;
                 try {
                     searchTime += 1.5;
-
                     const info = document.getElementById('matchmaking-info');
                     if (info) {
                         if (searchTime < 10) info.textContent = `Searching for a player near your rating (${myRating.toFixed(1)})…`;
-                        else if (searchTime < 30) info.textContent = `Still searching… expanding rating range`;
+                        else if (searchTime < 30) info.textContent = 'Still searching… expanding rating range';
                         else info.textContent = `Searching globally… (${Math.floor(searchTime)}s)`;
                     }
 
-                    // 1) Has an earlier player already created a room for me?
-                    const { data: rooms, error: roomsError } = await supabaseClient
-                        .from('sudoku_rooms')
-                        .select('id, state, guest_id')
-                        .eq('guest_id', myId)
-                        .limit(10);
-                    if (roomsError) console.error('[Matchmaking] assigned-room lookup failed:', roomsError);
-                    const assignedRooms = (rooms || []).filter(r => String(r.state?.matchTicket) === String(myRow.id));
-
-                    if (assignedRooms && assignedRooms.length) {
+                    const { data, error } = await supabaseClient.rpc('find_or_create_matchmaking_match', {
+                        p_player_name: myName,
+                        p_rating: myRating,
+                        p_time_limit: gameState.timeLimit,
+                        p_game_mode: gameState.gameMode,
+                        p_difficulty: gameState.difficulty,
+                        p_variant: gameState.variant || 'classic'
+                    });
+                    if (error) {
+                        console.error('[Matchmaking] atomic matchmaking RPC failed:', error);
                         clearInterval(onlineState._mmInterval);
                         onlineState._mmInterval = null;
-                        await supabaseClient.from('matchmaking_queue').delete().eq('player_id', myId);
-                        onlineState._myMMId = null;
+                        await leaveMatchmakingQueue();
                         hideWaitingOverlay();
-                        await joinOnlineRoom(assignedRooms[0].id);
-                        if (gameState.isRunning && onlineState.roomId === assignedRooms[0].id) {
-                            showToast(`⚔ Matched with ${assignedRooms[0].state.p1Name || 'opponent'}!`, 2500);
-                        } else {
-                            showToast('Could not join the match, searching again…', 2000);
-                            setTimeout(findOpponent, 1500);
+                        showToast('Matchmaking setup error. Run the new matchmaking SQL in Supabase.', 4500);
+                        return;
+                    }
+
+                    const match = Array.isArray(data) ? data[0] : data;
+                    if (match?.status === 'matched' || match?.status === 'paired' || match?.status === 'ready') {
+                        const matchId = match.match_id || match.id;
+                        if (!matchId) return;
+                        onlineState._activeMatchId = matchId;
+
+                        // The designated host creates the room exactly once. The guest waits
+                        // for the host to publish the room ID through the same atomic match row.
+                        if (String(match.host_id) === String(myId)) {
+                            if (handledMatchId === matchId) return;
+                            handledMatchId = matchId;
+                            clearInterval(onlineState._mmInterval);
+                            onlineState._mmInterval = null;
+                            await startMatchmakingAsHost({
+                                id: matchId,
+                                match_id: matchId,
+                                player_id: match.guest_id,
+                                player_name: match.guest_name || 'Opponent'
+                            });
+                            return;
+                        }
+
+                        if (match.room_id && match.status === 'ready') {
+                            clearInterval(onlineState._mmInterval);
+                            onlineState._mmInterval = null;
+                            hideWaitingOverlay();
+                            await joinOnlineRoom(match.room_id);
+                            if (gameState.isRunning && onlineState.roomId === match.room_id) {
+                                onlineState._activeMatchId = null;
+                                showToast(`⚔ Matched with ${match.host_name || 'opponent'}!`, 2500);
+                            } else {
+                                console.warn('[Matchmaking] room was published but joining failed', match.room_id);
+                                await leaveMatchmakingQueue();
+                                setTimeout(findOpponent, 1500);
+                            }
                         }
                         return;
                     }
 
-                    // 2) Give up after a while (my queue row would look stale to others anyway)
+                    if (match?.status === 'cancelled' || match?.status === 'expired') {
+                        // A stale match was cancelled; the next poll creates a fresh queue entry.
+                        onlineState._activeMatchId = null;
+                    }
+
                     if (searchTime > 240) {
                         clearInterval(onlineState._mmInterval);
                         onlineState._mmInterval = null;
                         await leaveMatchmakingQueue();
                         hideWaitingOverlay();
                         showToast('No opponents found right now — try again soon', 3000);
-                        return;
                     }
-
-                    // 3) Host role: look for someone who joined AFTER me
-                    const ratingRange = Math.min(0.5 + searchTime * 0.05, 5.0);
-                    const freshAfter  = new Date(Date.now() - 5 * 60 * 1000).toISOString(); // ignore ghost rows
-                    const { data: candidates, error: candidateError } = await supabaseClient
-                        .from('matchmaking_queue')
-                        .select('*')
-                        .neq('player_id', myId)
-                        .eq('time_limit', gameState.timeLimit)
-                        .eq('game_mode', gameState.gameMode)
-                        .eq('difficulty', gameState.difficulty)
-                        .gte('rating', myRating - ratingRange)
-                        .lte('rating', myRating + ratingRange)
-                        .gt('joined_at', myRow.joined_at)
-                        .gte('joined_at', freshAfter)
-                        .order('joined_at', { ascending: true })
-                        .limit(1);
-
-                    if (candidateError) { console.error('[Matchmaking] candidate lookup failed:', candidateError); return; }
-                    if (!candidates || candidates.length === 0) return;
-
-                    clearInterval(onlineState._mmInterval);
-                    onlineState._mmInterval = null;
-                    await startMatchmakingAsHost(candidates[0]);
                 } catch (e) {
                     console.error('[Matchmaking] poll error:', e);
                 } finally {
                     busy = false;
                 }
-            }, 1500);
+            };
+
+            // Start the interval before the first request so cancellation works even
+            // while the initial RPC is still in flight. The busy flag prevents overlap.
+            onlineState._mmInterval = setInterval(pollMatchmaking, 1500);
+            await pollMatchmaking();
         }
 
         async function startMatchmakingAsHost(opponent) {
@@ -5234,10 +5211,27 @@
                 return;
             }
 
-            await supabaseClient.from('matchmaking_queue').delete().eq('player_id', currentUser.id);
+            onlineState._activeMatchId = opponent.match_id || opponent.id;
             onlineState._myMMId = null;
-
             subscribeToRoom(roomId);
+
+            // Publish the room only after it exists. The guest polls the same match record
+            // and joins this exact room ID; it no longer searches sudoku_rooms by ticket.
+            const { data: published, error: publishError } = await supabaseClient.rpc('publish_matchmaking_room', {
+                p_match_id: onlineState._activeMatchId,
+                p_room_id: roomId
+            });
+            if (publishError || published !== true) {
+                console.error('[Matchmaking] room publish failed:', publishError || 'RPC did not confirm publication');
+                await supabaseClient.from('sudoku_rooms').delete().eq('id', roomId);
+                if (onlineState.subscription) await supabaseClient.removeChannel(onlineState.subscription);
+                onlineState.subscription = null;
+                onlineState.roomId = null;
+                await leaveMatchmakingQueue();
+                hideWaitingOverlay();
+                showToast('Could not publish the match. Check the matchmaking SQL/RPC permissions.', 4000);
+                return;
+            }
             const info = document.getElementById('matchmaking-info');
             if (info) info.textContent = `Found ${opponent.player_name || 'an opponent'} — starting…`;
 
@@ -5250,6 +5244,10 @@
                     if (gameState.isRunning) return;
                 }
                 console.warn('[Matchmaking] opponent never joined room', roomId, latestRoomError || '');
+                if (onlineState._activeMatchId) {
+                    await supabaseClient.rpc('cancel_my_matchmaking_match', { p_match_id: onlineState._activeMatchId });
+                    onlineState._activeMatchId = null;
+                }
                 if (onlineState.subscription) supabaseClient.removeChannel(onlineState.subscription);
                 onlineState.subscription = null;
                 if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
@@ -5261,12 +5259,24 @@
         }
 
         async function leaveMatchmakingQueue() {
-            if (!supabaseClient || !onlineState._myMMId) return;
+            if (!supabaseClient) return;
             try {
-                await supabaseClient.from('matchmaking_queue')
-                    .delete().eq('player_id', onlineState._myMMId);
-            } catch(e) { /* ignore */ }
+                if (onlineState._activeMatchId) {
+                    const { error } = await supabaseClient.rpc('cancel_my_matchmaking_match', {
+                        p_match_id: onlineState._activeMatchId
+                    });
+                    if (error) console.warn('[Matchmaking] cancellation RPC failed:', error);
+                }
+                const playerId = onlineState._myMMId || currentUser?.id;
+                if (playerId) {
+                    const { error } = await supabaseClient.from('matchmaking_queue').delete().eq('player_id', playerId);
+                    if (error) console.warn('[Matchmaking] queue cleanup failed:', error);
+                }
+            } catch (e) {
+                console.warn('[Matchmaking] leave queue failed:', e);
+            }
             onlineState._myMMId = null;
+            onlineState._activeMatchId = null;
             // Reset waiting UI back to normal room mode
             document.getElementById('waiting-room-section').style.display = 'block';
             document.getElementById('waiting-sub').style.display = 'block';
@@ -5398,6 +5408,7 @@
             if (onlineState.isHost && remoteState.status === 'playing' && !gameState.isRunning) {
                 if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
                 hideWaitingOverlay();
+                onlineState._activeMatchId = null;
                 startOnlineGame(onlineState._puzzleData, remoteState, 1);
                 vibrate([50, 30, 100]);
                 return;
