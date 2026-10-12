@@ -5724,12 +5724,9 @@
             _origMakeMove(number);
             if (correct) {
                 if (onlineState.roomId) {
-                    // In turn-based online play, hand over the local turn immediately.
-                    // Do not wait for the database round-trip before updating the UI.
-                    if (gameState.gameMode === 'passplay') {
-                        gameState.currentPlayer = onlineState.playerSlot === 1 ? 2 : 1;
-                        updateTurnIndicator();
-                    }
+                    // _origMakeMove() already switches currentPlayer in passplay mode.
+                    // Do not switch it again here: a second toggle gives the turn back
+                    // to the player who just moved and blocks the opponent.
                     pushMoveOnline(row, col, number);
                 }
                 vibrate(35);
