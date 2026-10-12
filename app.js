@@ -2283,9 +2283,10 @@
             // Push resign to Supabase BEFORE ending locally so opponent gets notified
             if (supabaseClient && onlineState.roomId) {
                 try {
-                    const { data } = await supabaseClient
-                        .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).single();
-                    if (data) {
+                    const { data, error: roomReadError } = await supabaseClient
+                        .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).maybeSingle();
+                    if (roomReadError) console.warn('[Resign] room lookup failed:', roomReadError);
+                    if (data?.state) {
                         const state = { ...data.state, status: 'resigned', resignedBy: onlineState.playerSlot };
                         await supabaseClient.from('sudoku_rooms')
                             .update({ state, updated_at: new Date().toISOString() })
@@ -5462,9 +5463,16 @@
             if (!rpcErr) return;
             console.warn('[pushMove] rpc unavailable, falling back:', rpcErr.message);
 
-            const { data } = await supabaseClient
-                .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).single();
-            if (!data) return;
+            const { data, error: roomReadError } = await supabaseClient
+                .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).maybeSingle();
+            if (roomReadError) {
+                console.warn('[pushMove] room lookup failed:', roomReadError);
+                return;
+            }
+            if (!data?.state) {
+                console.warn('[pushMove] room no longer exists; skipping move sync.');
+                return;
+            }
             const state = data.state;
             state.moves = [...(state.moves || []), moveEntry];
             state.scores = scores;
