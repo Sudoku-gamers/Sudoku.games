@@ -5286,54 +5286,108 @@
         }
 
         async function joinOnlineRoom(roomId) {
-            if (!supabaseClient) return;
-            roomId = roomId.toUpperCase().trim();
+            if (!supabaseClient) {
+                document.getElementById('join-error').textContent = 'Online service is not connected. Please reconnect and try again.';
+                return;
+            }
+            roomId = String(roomId || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+            const errorEl = document.getElementById('join-error');
             if (!currentUser) {
-                document.getElementById('join-error').textContent = 'Still connecting… try again in a second.';
+                errorEl.textContent = 'Still signing in… try again in a second.';
                 return;
             }
-            const { data, error } = await supabaseClient
-                .from('sudoku_rooms').select('*').eq('id', roomId).maybeSingle();
-            if (error) {
-                console.error('[Join room] lookup failed:', error);
-                document.getElementById('join-error').textContent = 'Could not look up room: ' + error.message;
+            if (roomId.length !== 6) {
+                errorEl.textContent = 'Enter the full 6-character room code.';
                 return;
             }
-            if (!data) {
-                document.getElementById('join-error').textContent = 'Room not found. Check the code.';
-                return;
-            }
-            if (data.state.status !== 'waiting') {
-                document.getElementById('join-error').textContent = 'This room is no longer available.';
-                return;
-            }
-            onlineState.roomId = roomId;
-            onlineState.playerSlot = 2;
-            onlineState.isHost = false;
-            onlineState.appliedMoves = new Set();
+            const joinBtn = document.getElementById('join-confirm-btn');
+            if (joinBtn) { joinBtn.disabled = true; joinBtn.textContent = 'JOINING…'; }
+            errorEl.textContent = '';
+            try {
+                console.info('[Join room] looking up room:', roomId);
+                const { data, error } = await supabaseClient
+                    .from('sudoku_rooms').select('id,host_id,guest_id,state,updated_at')
+                    .eq('id', roomId).maybeSingle();
+                if (error) {
+                    console.error('[Join room] lookup failed:', error);
+                    errorEl.textContent = /permission|policy|rls/i.test(error.message || '')
+                        ? 'Room access was blocked by the database. The room security migration must be applied.'
+                        : 'Could not check room: ' + error.message;
+                    return;
+                }
+                if (!data) {
+                    errorEl.textContent = 'Room not found. Check the code and make sure the host is still waiting.';
+                    return;
+                }
+                const state = data.state || {};
+                const status = String(state.status || '').toLowerCase();
+                if (data.host_id && data.host_id === currentUser.id) {
+                    errorEl.textContent = 'You cannot join your own room. Open it from the waiting screen.';
+                    return;
+                }
+                if (status !== 'waiting') {
+                    console.warn('[Join room] room is not waiting:', { roomId, status, updated_at: data.updated_at });
+                    errorEl.textContent = status === 'playing'
+                        ? 'This game has already started. Ask the host to create a new room.'
+                        : status
+                            ? 'This room is not waiting for a player (status: ' + status + '). Ask the host to create a new room.'
+                            : 'This room has an invalid status. The host should recreate it.';
+                    return;
+                }
+                if (data.guest_id && data.guest_id !== currentUser.id) {
+                    errorEl.textContent = 'This room is reserved for another player. Try Quick Pairing again.';
+                    return;
+                }
+                if (!state.puzzle || !state.solution) {
+                    errorEl.textContent = 'This room is missing its puzzle data. Ask the host to create a new room.';
+                    return;
+                }
 
-            const puzzleData = { puzzle: data.state.puzzle, solution: data.state.solution };
-            onlineState._puzzleData = puzzleData;
-            // Restore variant from room so both players use same rules
-            if (data.state.variant) gameState.variant = data.state.variant;
+                // Claim the room with a conditional update. The status and guest checks stop two
+                // clients from both believing they successfully joined the same open room.
+                const updatedState = { ...state, status: 'playing', p2Name: playerData.settings.username };
+                let claim = supabaseClient.from('sudoku_rooms')
+                    .update({ state: updatedState, updated_at: new Date().toISOString(), guest_id: currentUser.id })
+                    .eq('id', roomId)
+                    .eq('state->>status', 'waiting');
+                if (data.guest_id === currentUser.id) claim = claim.eq('guest_id', currentUser.id);
+                else claim = claim.is('guest_id', null);
+                const { data: joined, error: joinErr } = await claim.select('id,host_id,guest_id,state');
+                if (joinErr || !joined || joined.length === 0) {
+                    console.error('[Join room] claim failed:', { roomId, joinErr, rows: joined });
+                    // Re-read to provide the correct reason if another player won the race.
+                    const { data: latest, error: rereadErr } = await supabaseClient
+                        .from('sudoku_rooms').select('guest_id,state').eq('id', roomId).maybeSingle();
+                    if (rereadErr) {
+                        errorEl.textContent = 'Could not complete joining. Check the room security policies in Supabase.';
+                    } else if (!latest) {
+                        errorEl.textContent = 'The room was removed before you could join.';
+                    } else if (latest.guest_id && latest.guest_id !== currentUser.id) {
+                        errorEl.textContent = 'Another player joined this room first. Try another room.';
+                    } else if (String(latest.state?.status || '').toLowerCase() !== 'waiting') {
+                        errorEl.textContent = 'The room changed while you were joining. Try creating or joining another room.';
+                    } else {
+                        errorEl.textContent = 'Database rejected the join. Apply the included security migration in Supabase SQL Editor.';
+                    }
+                    return;
+                }
 
-            const updatedState = { ...data.state, status: 'playing', p2Name: playerData.settings.username };
-            const { data: joined, error: joinErr } = await supabaseClient.from('sudoku_rooms')
-                .update({ state: updatedState, updated_at: new Date().toISOString(), guest_id: currentUser.id })
-                .eq('id', roomId)
-                .select('id');
-            if (joinErr || !joined || joined.length === 0) {
-                // RLS can silently block an update (0 rows, no error), so check both
-                console.error('[Join room] update failed:', joinErr, 'rows:', joined);
-                document.getElementById('join-error').textContent =
-                    'Could not join: ' + (joinErr ? joinErr.message : 'permission blocked the update (check room policies).');
-                onlineState.roomId = null;
-                return;
+                onlineState.roomId = roomId;
+                onlineState.playerSlot = 2;
+                onlineState.isHost = false;
+                onlineState.appliedMoves = new Set();
+                const puzzleData = { puzzle: state.puzzle, solution: state.solution };
+                onlineState._puzzleData = puzzleData;
+                if (state.variant) gameState.variant = state.variant;
+                document.getElementById('join-room-modal').classList.remove('active');
+                subscribeToRoom(roomId);
+                startOnlineGame(puzzleData, updatedState, 2);
+            } catch (e) {
+                console.error('[Join room] unexpected error:', e);
+                errorEl.textContent = 'Could not join room: ' + (e?.message || 'unexpected error');
+            } finally {
+                if (joinBtn) { joinBtn.disabled = false; joinBtn.textContent = 'JOIN GAME'; }
             }
-
-            document.getElementById('join-room-modal').classList.remove('active');
-            subscribeToRoom(roomId);
-            startOnlineGame(puzzleData, data.state, 2);
         }
 
         function subscribeToRoom(roomId) {
@@ -5553,8 +5607,8 @@
             });
 
             document.getElementById('join-confirm-btn').addEventListener('click', () => {
-                const code = document.getElementById('join-code-input').value;
-                if (code.length < 6) {
+                const code = document.getElementById('join-code-input').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (code.length !== 6) {
                     document.getElementById('join-error').textContent = 'Please enter the full 6-character code.';
                     return;
                 }
