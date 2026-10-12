@@ -5113,26 +5113,38 @@
                     }
 
                     // 1) Has an earlier player already created a room for me?
-                    const { data: rooms } = await supabaseClient
+                    const { data: rooms, error: roomLookupError } = await supabaseClient
                         .from('sudoku_rooms')
-                        .select('id, state')
+                        .select('id, state, updated_at')
                         .eq('guest_id', myId)
-                        .eq('state->>matchTicket', String(myRow.id))
-                        .limit(1);
+                        .order('updated_at', { ascending: false })
+                        .limit(10);
+                    if (roomLookupError) console.warn('[Matchmaking] room lookup failed:', roomLookupError);
+                    // Do not rely on a JSON-path filter for the ticket: older PostgREST
+                    // schemas/configurations can return no rows for that filter even when
+                    // the guest_id room is visible. Verify the ticket in JS instead.
+                    const matchedRoom = (rooms || []).find(room =>
+                        room.state && room.state.matchmade === true &&
+                        String(room.state.matchTicket) === String(myRow.id) &&
+                        room.state.status === 'waiting'
+                    );
 
-                    if (rooms && rooms.length) {
+                    if (matchedRoom) {
                         clearInterval(onlineState._mmInterval);
                         onlineState._mmInterval = null;
                         await supabaseClient.from('matchmaking_queue').delete().eq('player_id', myId);
                         onlineState._myMMId = null;
-                        hideWaitingOverlay();
-                        await joinOnlineRoom(rooms[0].id);
+                        // Keep the overlay visible until the room update succeeds, so a failed
+                        // handoff can show a useful error instead of looking like a frozen screen.
+                        await joinOnlineRoom(matchedRoom.id);
                         if (onlineState.roomId && gameState.isRunning) {
-                            showToast(`⚔ Matched with ${rooms[0].state.p1Name || 'opponent'}!`, 2500);
+                            hideWaitingOverlay();
+                            showToast(`⚔ Matched with ${matchedRoom.state.p1Name || 'opponent'}!`, 2500);
                         } else {
-                            console.warn('[Matchmaking] room handoff failed; returning player to queue', rooms[0].id);
+                            console.warn('[Matchmaking] room handoff failed; returning player to queue', matchedRoom.id);
                             onlineState.roomId = null;
-                            showToast('Match connection failed. Looking for another opponent…', 2500);
+                            showToast('Could not join match. Searching again…', 2500);
+                            hideWaitingOverlay();
                             setTimeout(findOpponent, 1500);
                         }
                         return;
@@ -5151,7 +5163,7 @@
                     // 3) Host role: look for someone who joined AFTER me
                     const ratingRange = Math.min(0.5 + searchTime * 0.05, 5.0);
                     const freshAfter  = new Date(Date.now() - 5 * 60 * 1000).toISOString(); // ignore ghost rows
-                    const { data: candidates } = await supabaseClient
+                    const { data: candidates, error: candidateError } = await supabaseClient
                         .from('matchmaking_queue')
                         .select('*')
                         .neq('player_id', myId)
@@ -5164,7 +5176,11 @@
                         .gte('joined_at', freshAfter)
                         .order('joined_at', { ascending: true })
                         .limit(1);
-
+                    if (candidateError) {
+                        console.error('[Matchmaking] candidate query failed:', candidateError);
+                        if (searchTime < 5) showToast('Matchmaking query failed: ' + candidateError.message, 3500);
+                        return;
+                    }
                     if (!candidates || candidates.length === 0) return;
 
                     clearInterval(onlineState._mmInterval);
@@ -6919,6 +6935,64 @@
     // ANDROID NATIVE GESTURE SYSTEM
     // ============================================================
     (function initAndroidGestures() {
+
+        // Visible, clickable back button. Unlike browser history alone, this handles
+        // app screens, game view, overlays, and active matchmaking directly.
+        function updateVisibleBackButton() {
+            const btn = document.getElementById('app-back-button');
+            if (!btn) return;
+            const show = isGameActive() || getCurrentPage() !== 'lobby' ||
+                !!getTopModal() || document.getElementById('waiting-overlay')?.classList.contains('active') ||
+                isSideMenuOpen();
+            btn.style.display = show ? 'inline-flex' : 'none';
+            btn.textContent = isGameActive() ? '← Back to Lobby' : '← Back';
+        }
+
+        function goBackInApp() {
+            const waiting = document.getElementById('waiting-overlay');
+            if (waiting?.classList.contains('active')) {
+                document.getElementById('cancel-waiting-btn')?.click();
+                updateVisibleBackButton();
+                return;
+            }
+            const modal = getTopModal();
+            if (modal) {
+                modal.classList.remove('active');
+                updateVisibleBackButton();
+                return;
+            }
+            const dojo = document.getElementById('dojo-modal') || document.getElementById('dojo-intro-modal') || document.getElementById('dojo-complete-modal');
+            if (dojo) { dojo.remove(); updateVisibleBackButton(); return; }
+            if (isSideMenuOpen()) {
+                document.getElementById('side-menu')?.classList.remove('active');
+                document.getElementById('side-menu-overlay')?.classList.remove('active');
+                updateVisibleBackButton();
+                return;
+            }
+            if (isGameActive()) {
+                document.getElementById('back-to-lobby-btn')?.click();
+                updateVisibleBackButton();
+                return;
+            }
+            if (getCurrentPage() !== 'lobby') {
+                document.querySelector('[data-page="lobby"]')?.click();
+                updateVisibleBackButton();
+                return;
+            }
+            // On the lobby, the button should normally be hidden; provide a safe fallback.
+            history.back();
+        }
+        document.getElementById('app-back-button')?.addEventListener('click', goBackInApp);
+        document.addEventListener('click', event => {
+            if (event.target.closest('.side-menu-item')) setTimeout(updateVisibleBackButton, 0);
+            if (event.target.closest('#find-opponent-btn, #cancel-waiting-btn, #back-to-lobby-btn, #game-menu-btn')) setTimeout(updateVisibleBackButton, 0);
+        });
+        const backUiObserver = new MutationObserver(() => updateVisibleBackButton());
+        ['waiting-overlay','game-screen','side-menu','join-room-modal','settings-page','history-page','friends-page','leaderboard-page','tournaments-page','profile-page'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) backUiObserver.observe(el, { attributes: true, attributeFilter: ['class','style'] });
+        });
+        setTimeout(updateVisibleBackButton, 0);
 
         // ── 1. NAVIGATION STACK ──────────────────────────────────
         // Maps each app "screen" to a history state so Android back

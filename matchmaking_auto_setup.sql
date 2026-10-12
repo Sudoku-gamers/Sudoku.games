@@ -73,3 +73,8 @@ create policy "only participants can delete a room" on public.sudoku_rooms
 -- Remove old abandoned queue tickets. Safe to run repeatedly.
 delete from public.matchmaking_queue
 where joined_at < now() - interval '5 minutes';
+
+-- Explicit API grants: RLS policies do not themselves grant SQL privileges.
+grant select, insert, delete on public.matchmaking_queue to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+grant select, insert, update, delete on public.sudoku_rooms to authenticated;
