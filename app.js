@@ -2369,12 +2369,16 @@
                     gameState.p1Time = gameState.timeRemaining;
                     gameState.p2Time = gameState.timeRemaining;
                 } else if (gameState.gameMode === 'passplay') {
+                    // Only the player whose turn it is loses time. Keep timeRemaining
+                    // tied to that active clock (not the minimum of both clocks), or
+                    // the inactive player's lower clock can trigger a false timeout.
                     if (gameState.currentPlayer === 1) {
-                        gameState.p1Time -= delta;
+                        gameState.p1Time = Math.max(0, gameState.p1Time - delta);
+                        gameState.timeRemaining = gameState.p1Time;
                     } else {
-                        gameState.p2Time -= delta;
+                        gameState.p2Time = Math.max(0, gameState.p2Time - delta);
+                        gameState.timeRemaining = gameState.p2Time;
                     }
-                    gameState.timeRemaining = Math.min(gameState.p1Time, gameState.p2Time);
                 } else {
                     gameState.timeRemaining -= delta;
                     gameState.p1Time = gameState.timeRemaining;
@@ -2423,14 +2427,21 @@
                 // Flash red when under 30s in timed solo
                 p1El.classList.toggle('low', soloTimed && gameState.timeRemaining < 30);
             } else {
-                const t1 = formatTime(gameState.p1Time);
-                const t2 = formatTime(gameState.p2Time);
+                // In online turn-based play, display the local player's clock first
+                // and the opponent's second, regardless of whether this client is slot 1 or 2.
+                const onlineTurnBased = gameState.gameMode === 'passplay' && !!onlineState.roomId;
+                const ownTime = onlineTurnBased
+                    ? (onlineState.playerSlot === 1 ? gameState.p1Time : gameState.p2Time)
+                    : gameState.p1Time;
+                const opponentTime = onlineTurnBased
+                    ? (onlineState.playerSlot === 1 ? gameState.p2Time : gameState.p1Time)
+                    : gameState.p2Time;
+                const t1 = formatTime(ownTime);
+                const t2 = formatTime(opponentTime);
                 if (t1 !== _lastTimerStr.p1) { p1El.textContent = t1; _lastTimerStr.p1 = t1; }
                 if (t2 !== _lastTimerStr.p2) { p2El.textContent = t2; _lastTimerStr.p2 = t2; }
-                const low1 = gameState.p1Time < 30;
-                const low2 = gameState.p2Time < 30;
-                p1El.classList.toggle('low', low1);
-                p2El.classList.toggle('low', low2);
+                p1El.classList.toggle('low', ownTime < 30);
+                p2El.classList.toggle('low', opponentTime < 30);
             }
         }
 
