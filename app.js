@@ -5061,101 +5061,108 @@
             document.getElementById('matchmaking-status').style.display = 'block';
             document.getElementById('waiting-overlay').classList.add('active');
 
-            // Remove any stale entry first
-            await supabaseClient.from('matchmaking_queue')
-                .delete().eq('player_id', myId);
+            // Remove any stale entry of mine first
+            await supabaseClient.from('matchmaking_queue').delete().eq('player_id', myId);
 
-            // Add ourselves to the queue
-            const { error } = await supabaseClient.from('matchmaking_queue').insert({
+            // Add ourselves to the queue. joined_at is left to the DB default (server clock)
+            // so ordering is not affected by differing device clocks. We read back our row id
+            // + joined_at: the id is the "ticket" the host stamps into our room.
+            const { data: myRow, error } = await supabaseClient.from('matchmaking_queue').insert({
                 player_id:   myId,
                 player_name: myName,
                 rating:      myRating,
                 time_limit:  gameState.timeLimit,
                 game_mode:   gameState.gameMode,
                 difficulty:  gameState.difficulty,
-                joined_at:   new Date().toISOString(),
-            });
+            }).select('id, joined_at').single();
 
-            if (error) {
+            if (error || !myRow) {
                 console.error('[Matchmaking] Insert error:', error);
-                showToast('Matchmaking error: ' + (error.message || error.code || JSON.stringify(error)), 3000);
+                showToast('Matchmaking error: ' + (error?.message || error?.code || 'unknown'), 3000);
                 hideWaitingOverlay();
                 return;
             }
 
             let searchTime = 0;
+            let busy = false;
             onlineState._myMMId = myId;
 
-            // Poll for a match every 1.5s
+            // Roles are decided by queue order, with NO shared state between the two players:
+            //   - the EARLIER joiner is the host: it sees the later joiner as a candidate and creates the room
+            //   - the LATER joiner is the guest: it just watches for a room created for it
+            // (RLS means a player can only write rows for themselves, so the old
+            //  "host writes a signal row for the other player" approach could never work.)
             onlineState._mmInterval = setInterval(async () => {
-                searchTime += 1.5;
+                if (busy) return;
+                busy = true;
+                try {
+                    searchTime += 1.5;
 
-                // Update status message
-                const info = document.getElementById('matchmaking-info');
-                if (info) {
-                    if (searchTime < 10) info.textContent = `Searching for a player near your rating (${myRating.toFixed(1)})…`;
-                    else if (searchTime < 30) info.textContent = `Still searching… expanding rating range`;
-                    else info.textContent = `Searching globally… (${Math.floor(searchTime)}s)`;
-                }
+                    const info = document.getElementById('matchmaking-info');
+                    if (info) {
+                        if (searchTime < 10) info.textContent = `Searching for a player near your rating (${myRating.toFixed(1)})…`;
+                        else if (searchTime < 30) info.textContent = `Still searching… expanding rating range`;
+                        else info.textContent = `Searching globally… (${Math.floor(searchTime)}s)`;
+                    }
 
-                // Widen rating range over time so we always eventually find someone
-                const ratingRange = Math.min(0.5 + searchTime * 0.05, 5.0);
+                    // 1) Has an earlier player already created a room for me?
+                    const { data: rooms } = await supabaseClient
+                        .from('sudoku_rooms')
+                        .select('id, state')
+                        .eq('guest_id', myId)
+                        .eq('state->>matchTicket', String(myRow.id))
+                        .limit(1);
 
-                // Look for another waiting player (not us, same time control, close rating)
-                const { data: candidates } = await supabaseClient
-                    .from('matchmaking_queue')
-                    .select('*')
-                    .neq('player_id', myId)
-                    .eq('time_limit', gameState.timeLimit)
-                    .gte('rating', myRating - ratingRange)
-                    .lte('rating', myRating + ratingRange)
-                    .order('joined_at', { ascending: true })
-                    .limit(1);
-
-                if (!candidates || candidates.length === 0) return;
-
-                const opponent = candidates[0];
-
-                // We found someone — the one who joined LATER creates the room
-                // (the earlier player becomes host, later player joins)
-                // We determine this by comparing joined_at times
-                const { data: me } = await supabaseClient
-                    .from('matchmaking_queue')
-                    .select('joined_at')
-                    .eq('player_id', myId)
-                    .single();
-
-                if (!me) return; // we were already matched and removed
-
-                const iJoinedLater = new Date(me.joined_at) >= new Date(opponent.joined_at);
-
-                clearInterval(onlineState._mmInterval);
-                onlineState._mmInterval = null;
-
-                if (iJoinedLater) {
-                    // I join the opponent's implicit room — they are the host
-                    // Remove both from queue and create the room as host = opponent
-                    await supabaseClient.from('matchmaking_queue')
-                        .delete().in('player_id', [myId, opponent.player_id]);
-                    await startMatchmakingAsGuest(opponent);
-                } else {
-                    // I am the host — wait a moment to see if the opponent picks me up
-                    // If they don't remove me from queue within 2s, I create the room
-                    setTimeout(async () => {
-                        const { data: stillInQueue } = await supabaseClient
-                            .from('matchmaking_queue')
-                            .select('player_id')
-                            .eq('player_id', myId)
-                            .single();
-
-                        if (stillInQueue) {
-                            // Opponent hasn't removed us yet — I'll create the room as host
-                            await supabaseClient.from('matchmaking_queue')
-                                .delete().in('player_id', [myId, opponent.player_id]);
-                            await startMatchmakingAsHost(opponent);
+                    if (rooms && rooms.length) {
+                        clearInterval(onlineState._mmInterval);
+                        onlineState._mmInterval = null;
+                        await supabaseClient.from('matchmaking_queue').delete().eq('player_id', myId);
+                        onlineState._myMMId = null;
+                        hideWaitingOverlay();
+                        await joinOnlineRoom(rooms[0].id);
+                        if (onlineState.roomId) {
+                            showToast(`⚔ Matched with ${rooms[0].state.p1Name || 'opponent'}!`, 2500);
+                        } else {
+                            showToast('Could not join the match, searching again…', 2000);
+                            setTimeout(findOpponent, 1500);
                         }
-                        // else: opponent already handled it, do nothing
-                    }, 2000);
+                        return;
+                    }
+
+                    // 2) Give up after a while (my queue row would look stale to others anyway)
+                    if (searchTime > 240) {
+                        clearInterval(onlineState._mmInterval);
+                        onlineState._mmInterval = null;
+                        await leaveMatchmakingQueue();
+                        hideWaitingOverlay();
+                        showToast('No opponents found right now — try again soon', 3000);
+                        return;
+                    }
+
+                    // 3) Host role: look for someone who joined AFTER me
+                    const ratingRange = Math.min(0.5 + searchTime * 0.05, 5.0);
+                    const freshAfter  = new Date(Date.now() - 5 * 60 * 1000).toISOString(); // ignore ghost rows
+                    const { data: candidates } = await supabaseClient
+                        .from('matchmaking_queue')
+                        .select('*')
+                        .neq('player_id', myId)
+                        .eq('time_limit', gameState.timeLimit)
+                        .gte('rating', myRating - ratingRange)
+                        .lte('rating', myRating + ratingRange)
+                        .gt('joined_at', myRow.joined_at)
+                        .gte('joined_at', freshAfter)
+                        .order('joined_at', { ascending: true })
+                        .limit(1);
+
+                    if (!candidates || candidates.length === 0) return;
+
+                    clearInterval(onlineState._mmInterval);
+                    onlineState._mmInterval = null;
+                    await startMatchmakingAsHost(candidates[0]);
+                } catch (e) {
+                    console.error('[Matchmaking] poll error:', e);
+                } finally {
+                    busy = false;
                 }
             }, 1500);
         }
@@ -5170,6 +5177,10 @@
             onlineState.appliedMoves = new Set();
             onlineState._puzzleData  = puzzleData;
 
+            // Same shape as a normal "create room" game: status starts as 'waiting', the guest's
+            // joinOnlineRoom() flips it to 'playing', and handleRoomUpdate() starts the host's game.
+            // guest_id is pre-set so RLS lets that guest update the room, and matchTicket lets
+            // the guest find exactly this room.
             const roomData = {
                 id: roomId,
                 host_id: currentUser.id,
@@ -5180,65 +5191,48 @@
                     timeLimit:   gameState.timeLimit,
                     difficulty:  gameState.difficulty,
                     gameMode:    gameState.gameMode,
-                    status:      'playing',    // go straight to playing — no waiting
+                    status:      'waiting',
                     p1Name:      playerData.settings.username,
                     p2Name:      opponent.player_name,
                     matchmade:   true,
+                    matchTicket: opponent.id,
                     scores:      { p1: 0, p2: 0 },
                     currentPlayer: 1,
                     moves:       [],
+                    variant:     gameState.variant || 'classic',
                 },
                 updated_at: new Date().toISOString()
             };
 
-            await supabaseClient.from('sudoku_rooms').upsert(roomData);
+            const { error } = await supabaseClient.from('sudoku_rooms').upsert(roomData);
+            if (error) {
+                console.error('[Matchmaking] room create failed:', error);
+                showToast('Could not create match: ' + error.message, 3500);
+                onlineState.roomId = null;
+                await leaveMatchmakingQueue();
+                hideWaitingOverlay();
+                return;
+            }
 
-            // Tell the guest which room to join via the queue match signal
-            await supabaseClient.from('matchmaking_queue').insert({
-                player_id:   opponent.player_id + '_match',
-                player_name: roomId,   // room code stored in player_name field as signal
-                rating:      0,
-                time_limit:  0,
-                game_mode:   'signal',
-                difficulty:  'signal',
-                joined_at:   new Date().toISOString(),
-            }).select();
+            await supabaseClient.from('matchmaking_queue').delete().eq('player_id', currentUser.id);
+            onlineState._myMMId = null;
 
             subscribeToRoom(roomId);
-            hideWaitingOverlay();
-            startOnlineGame(puzzleData, roomData.state, 1);
-            vibrate([50, 30, 100]);
-            showToast(`⚔ Matched with ${opponent.player_name}!`, 2500);
-        }
+            const info = document.getElementById('matchmaking-info');
+            if (info) info.textContent = `Found ${opponent.player_name || 'an opponent'} — starting…`;
 
-        async function startMatchmakingAsGuest(opponent) {
-            // Poll for the signal row that tells us which room to join
-            let attempts = 0;
-            const signalId = opponent.player_id + '_match';
-
-            const checkSignal = setInterval(async () => {
-                attempts++;
-                const { data } = await supabaseClient
-                    .from('matchmaking_queue')
-                    .select('player_name')
-                    .eq('player_id', signalId)
-                    .single();
-
-                if (data?.player_name) {
-                    clearInterval(checkSignal);
-                    const roomId = data.player_name;
-                    // Clean up signal
-                    await supabaseClient.from('matchmaking_queue').delete().eq('player_id', signalId);
-                    hideWaitingOverlay();
-                    await joinOnlineRoom(roomId);
-                    showToast(`⚔ Matched with ${opponent.player_name}!`, 2500);
-                } else if (attempts > 10) {
-                    clearInterval(checkSignal);
-                    // Host didn't respond — try finding again
-                    showToast('Match lost, searching again…', 2000);
-                    setTimeout(findOpponent, 2000);
-                }
-            }, 800);
+            // If the opponent was a ghost (closed their tab), don't wait forever
+            setTimeout(async () => {
+                if (onlineState.roomId !== roomId || gameState.isRunning) return;
+                console.warn('[Matchmaking] opponent never joined room', roomId);
+                if (onlineState.subscription) supabaseClient.removeChannel(onlineState.subscription);
+                onlineState.subscription = null;
+                if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
+                onlineState.roomId = null;
+                await supabaseClient.from('sudoku_rooms').delete().eq('id', roomId);
+                showToast('Opponent did not connect, searching again…', 2500);
+                setTimeout(findOpponent, 1000);
+            }, 20000);
         }
 
         async function leaveMatchmakingQueue() {
@@ -5246,9 +5240,6 @@
             try {
                 await supabaseClient.from('matchmaking_queue')
                     .delete().eq('player_id', onlineState._myMMId);
-                // Also clean up signal row if any
-                await supabaseClient.from('matchmaking_queue')
-                    .delete().eq('player_id', onlineState._myMMId + '_match');
             } catch(e) { /* ignore */ }
             onlineState._myMMId = null;
             // Reset waiting UI back to normal room mode
@@ -5424,21 +5415,34 @@
 
         async function pushMoveOnline(row, col, number) {
             if (!supabaseClient || !onlineState.roomId) return;
+            const moveEntry = { player: onlineState.playerSlot, row, col, number, t: Date.now() };
+            const scores = { p1: gameState.scores.p1, p2: gameState.scores.p2 };
+            const opponentSlot = onlineState.playerSlot === 1 ? 2 : 1;
+            const nextPlayer = gameState.gameMode === 'passplay' ? opponentSlot : null;
+
+            // Preferred: atomic server-side append (see append_room_move in multiplayer_fix.sql).
+            // The old read-modify-write below can silently DROP a move when both players
+            // move at about the same time.
+            const { error: rpcErr } = await supabaseClient.rpc('append_room_move', {
+                p_room: onlineState.roomId,
+                p_move: moveEntry,
+                p_scores: scores,
+                p_next_player: nextPlayer
+            });
+            if (!rpcErr) return;
+            console.warn('[pushMove] rpc unavailable, falling back:', rpcErr.message);
+
             const { data } = await supabaseClient
                 .from('sudoku_rooms').select('state').eq('id', onlineState.roomId).single();
             if (!data) return;
             const state = data.state;
-            const moveEntry = { player: onlineState.playerSlot, row, col, number, t: Date.now() };
             state.moves = [...(state.moves || []), moveEntry];
-            state.scores = { p1: gameState.scores.p1, p2: gameState.scores.p2 };
-            // In pass & play, hand turn to the opponent after our move
-            if (gameState.gameMode === 'passplay') {
-                const opponentSlot = onlineState.playerSlot === 1 ? 2 : 1;
-                state.currentPlayer = opponentSlot;
-            }
-            await supabaseClient.from('sudoku_rooms')
+            state.scores = scores;
+            if (nextPlayer) state.currentPlayer = nextPlayer;
+            const { error } = await supabaseClient.from('sudoku_rooms')
                 .update({ state, updated_at: new Date().toISOString() })
                 .eq('id', onlineState.roomId);
+            if (error) console.error('[pushMove] update failed:', error);
         }
 
         function startOnlineGame(puzzleData, roomState, mySlot) {
@@ -5592,7 +5596,7 @@
             const urlRoom = new URLSearchParams(window.location.search).get('room');
             if (urlRoom) {
                 const tryJoin = setInterval(() => {
-                    if (supabaseClient && onlineState.enabled) {
+                    if (supabaseClient && onlineState.enabled && currentUser) {
                         clearInterval(tryJoin);
                         document.getElementById('join-code-input').value = urlRoom.toUpperCase();
                         joinOnlineRoom(urlRoom);
