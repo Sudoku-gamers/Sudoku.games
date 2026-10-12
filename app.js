@@ -1863,14 +1863,29 @@
             document.getElementById('resign-btn').addEventListener('click', resignGame);
             document.getElementById('new-game-btn').addEventListener('click', resetGame);
             document.getElementById('game-menu-btn').addEventListener('click', exitToLobby);
+            document.getElementById('visible-back-btn')?.addEventListener('click', () => {
+                const activeModal = getTopModal();
+                if (activeModal) { activeModal.classList.remove('active'); return; }
+                if (onlineState._mmInterval) { clearInterval(onlineState._mmInterval); onlineState._mmInterval = null; }
+                if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
+                if (onlineState._myMMId && supabaseClient) supabaseClient.from('matchmaking_queue').delete().eq('player_id', onlineState._myMMId);
+                onlineState._myMMId = null; hideWaitingOverlay(); exitToLobby();
+            });
 
             // Result modal
             document.getElementById('play-again-btn').addEventListener('click', () => {
                 document.getElementById('result-modal').classList.remove('active');
                 resetGame();
             });
-            document.getElementById('back-to-lobby-btn').addEventListener('click', () => {
+            document.getElementById('back-to-lobby-btn').addEventListener('click', async () => {
                 document.getElementById('result-modal').classList.remove('active');
+                if (onlineState._mmInterval) { clearInterval(onlineState._mmInterval); onlineState._mmInterval = null; }
+                if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
+                if (onlineState.subscription && supabaseClient) { await supabaseClient.removeChannel(onlineState.subscription); onlineState.subscription = null; }
+                if (onlineState._myMMId && supabaseClient) { await supabaseClient.from('matchmaking_queue').delete().eq('player_id', onlineState._myMMId); onlineState._myMMId = null; }
+                hideWaitingOverlay();
+                onlineState.roomId = null;
+                gameState.isRunning = false;
                 exitToLobby();
             });
 
@@ -5061,15 +5076,8 @@
             document.getElementById('matchmaking-status').style.display = 'block';
             document.getElementById('waiting-overlay').classList.add('active');
 
-            // Remove stale entries for this player and expired queue entries before entering.
-            const { error: cleanupError } = await supabaseClient
-                .from('matchmaking_queue').delete().or(`player_id.eq.${myId},joined_at.lt.${new Date(Date.now() - 5 * 60 * 1000).toISOString()}`);
-            if (cleanupError) {
-                console.error('[Matchmaking] queue cleanup failed:', cleanupError);
-                showToast('Could not prepare matchmaking: ' + cleanupError.message, 3500);
-                hideWaitingOverlay();
-                return;
-            }
+            // Remove any stale entry of mine first
+            await supabaseClient.from('matchmaking_queue').delete().eq('player_id', myId);
 
             // Add ourselves to the queue. joined_at is left to the DB default (server clock)
             // so ordering is not affected by differing device clocks. We read back our row id
@@ -5113,38 +5121,25 @@
                     }
 
                     // 1) Has an earlier player already created a room for me?
-                    const { data: rooms, error: roomLookupError } = await supabaseClient
+                    const { data: rooms, error: roomsError } = await supabaseClient
                         .from('sudoku_rooms')
-                        .select('id, state, updated_at')
+                        .select('id, state, guest_id')
                         .eq('guest_id', myId)
-                        .order('updated_at', { ascending: false })
                         .limit(10);
-                    if (roomLookupError) console.warn('[Matchmaking] room lookup failed:', roomLookupError);
-                    // Do not rely on a JSON-path filter for the ticket: older PostgREST
-                    // schemas/configurations can return no rows for that filter even when
-                    // the guest_id room is visible. Verify the ticket in JS instead.
-                    const matchedRoom = (rooms || []).find(room =>
-                        room.state && room.state.matchmade === true &&
-                        String(room.state.matchTicket) === String(myRow.id) &&
-                        room.state.status === 'waiting'
-                    );
+                    if (roomsError) console.error('[Matchmaking] assigned-room lookup failed:', roomsError);
+                    const assignedRooms = (rooms || []).filter(r => String(r.state?.matchTicket) === String(myRow.id));
 
-                    if (matchedRoom) {
+                    if (assignedRooms && assignedRooms.length) {
                         clearInterval(onlineState._mmInterval);
                         onlineState._mmInterval = null;
                         await supabaseClient.from('matchmaking_queue').delete().eq('player_id', myId);
                         onlineState._myMMId = null;
-                        // Keep the overlay visible until the room update succeeds, so a failed
-                        // handoff can show a useful error instead of looking like a frozen screen.
-                        await joinOnlineRoom(matchedRoom.id);
-                        if (onlineState.roomId && gameState.isRunning) {
-                            hideWaitingOverlay();
-                            showToast(`⚔ Matched with ${matchedRoom.state.p1Name || 'opponent'}!`, 2500);
+                        hideWaitingOverlay();
+                        await joinOnlineRoom(assignedRooms[0].id);
+                        if (gameState.isRunning && onlineState.roomId === assignedRooms[0].id) {
+                            showToast(`⚔ Matched with ${assignedRooms[0].state.p1Name || 'opponent'}!`, 2500);
                         } else {
-                            console.warn('[Matchmaking] room handoff failed; returning player to queue', matchedRoom.id);
-                            onlineState.roomId = null;
-                            showToast('Could not join match. Searching again…', 2500);
-                            hideWaitingOverlay();
+                            showToast('Could not join the match, searching again…', 2000);
                             setTimeout(findOpponent, 1500);
                         }
                         return;
@@ -5176,11 +5171,8 @@
                         .gte('joined_at', freshAfter)
                         .order('joined_at', { ascending: true })
                         .limit(1);
-                    if (candidateError) {
-                        console.error('[Matchmaking] candidate query failed:', candidateError);
-                        if (searchTime < 5) showToast('Matchmaking query failed: ' + candidateError.message, 3500);
-                        return;
-                    }
+
+                    if (candidateError) { console.error('[Matchmaking] candidate lookup failed:', candidateError); return; }
                     if (!candidates || candidates.length === 0) return;
 
                     clearInterval(onlineState._mmInterval);
@@ -5251,7 +5243,12 @@
             // If the opponent was a ghost (closed their tab), don't wait forever
             setTimeout(async () => {
                 if (onlineState.roomId !== roomId || gameState.isRunning) return;
-                console.warn('[Matchmaking] opponent never joined room', roomId);
+                const { data: latestRoom, error: latestRoomError } = await supabaseClient.from('sudoku_rooms').select('state').eq('id', roomId).maybeSingle();
+                if (!latestRoomError && latestRoom?.state?.status === 'playing') {
+                    handleRoomUpdate(latestRoom.state);
+                    if (gameState.isRunning) return;
+                }
+                console.warn('[Matchmaking] opponent never joined room', roomId, latestRoomError || '');
                 if (onlineState.subscription) supabaseClient.removeChannel(onlineState.subscription);
                 onlineState.subscription = null;
                 if (onlineState._pollInterval) { clearInterval(onlineState._pollInterval); onlineState._pollInterval = null; }
@@ -5259,7 +5256,7 @@
                 await supabaseClient.from('sudoku_rooms').delete().eq('id', roomId);
                 showToast('Opponent did not connect, searching again…', 2500);
                 setTimeout(findOpponent, 1000);
-            }, 20000);
+            }, 45000);
         }
 
         async function leaveMatchmakingQueue() {
@@ -6935,64 +6932,6 @@
     // ANDROID NATIVE GESTURE SYSTEM
     // ============================================================
     (function initAndroidGestures() {
-
-        // Visible, clickable back button. Unlike browser history alone, this handles
-        // app screens, game view, overlays, and active matchmaking directly.
-        function updateVisibleBackButton() {
-            const btn = document.getElementById('app-back-button');
-            if (!btn) return;
-            const show = isGameActive() || getCurrentPage() !== 'lobby' ||
-                !!getTopModal() || document.getElementById('waiting-overlay')?.classList.contains('active') ||
-                isSideMenuOpen();
-            btn.style.display = show ? 'inline-flex' : 'none';
-            btn.textContent = isGameActive() ? '← Back to Lobby' : '← Back';
-        }
-
-        function goBackInApp() {
-            const waiting = document.getElementById('waiting-overlay');
-            if (waiting?.classList.contains('active')) {
-                document.getElementById('cancel-waiting-btn')?.click();
-                updateVisibleBackButton();
-                return;
-            }
-            const modal = getTopModal();
-            if (modal) {
-                modal.classList.remove('active');
-                updateVisibleBackButton();
-                return;
-            }
-            const dojo = document.getElementById('dojo-modal') || document.getElementById('dojo-intro-modal') || document.getElementById('dojo-complete-modal');
-            if (dojo) { dojo.remove(); updateVisibleBackButton(); return; }
-            if (isSideMenuOpen()) {
-                document.getElementById('side-menu')?.classList.remove('active');
-                document.getElementById('side-menu-overlay')?.classList.remove('active');
-                updateVisibleBackButton();
-                return;
-            }
-            if (isGameActive()) {
-                document.getElementById('back-to-lobby-btn')?.click();
-                updateVisibleBackButton();
-                return;
-            }
-            if (getCurrentPage() !== 'lobby') {
-                document.querySelector('[data-page="lobby"]')?.click();
-                updateVisibleBackButton();
-                return;
-            }
-            // On the lobby, the button should normally be hidden; provide a safe fallback.
-            history.back();
-        }
-        document.getElementById('app-back-button')?.addEventListener('click', goBackInApp);
-        document.addEventListener('click', event => {
-            if (event.target.closest('.side-menu-item')) setTimeout(updateVisibleBackButton, 0);
-            if (event.target.closest('#find-opponent-btn, #cancel-waiting-btn, #back-to-lobby-btn, #game-menu-btn')) setTimeout(updateVisibleBackButton, 0);
-        });
-        const backUiObserver = new MutationObserver(() => updateVisibleBackButton());
-        ['waiting-overlay','game-screen','side-menu','join-room-modal','settings-page','history-page','friends-page','leaderboard-page','tournaments-page','profile-page'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) backUiObserver.observe(el, { attributes: true, attributeFilter: ['class','style'] });
-        });
-        setTimeout(updateVisibleBackButton, 0);
 
         // ── 1. NAVIGATION STACK ──────────────────────────────────
         // Maps each app "screen" to a history state so Android back
