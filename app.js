@@ -3950,7 +3950,7 @@
         // ============================================
         window.addEventListener('beforeunload', () => {
             if (aiTimeout) clearTimeout(aiTimeout);
-            if (supabase && onlineState.subscription) supabase.removeChannel(onlineState.subscription);
+            if (supabaseClient && onlineState.subscription) supabaseClient.removeChannel(onlineState.subscription);
         });
 
         // ============================================
@@ -4049,7 +4049,7 @@
                     }
                 });
                 const { error } = await supabaseClient.from('sudoku_rooms').select('id').limit(1);
-                if (error) throw error;
+                if (error) console.warn('[Supabase] health check failed (client kept):', error.message);
                 await saveCredentials(url, key);
                 // Also keep localStorage as fallback
                 localStorage.setItem('sb_url', url);
@@ -4062,9 +4062,11 @@
                 startRealtimeStats();
                 loadTournaments();
             } catch(e) {
+                console.error('[Supabase connect failed]', e);
                 statusEl.className = 'config-status err';
                 statusEl.textContent = '● ' + (e.message || 'Connection failed — check URL & key');
-                supabaseClient = null;
+                // Only a missing SDK or failed createClient leaves the client unusable
+                if (!window.supabase) supabaseClient = null;
             }
         }
 
@@ -5823,6 +5825,11 @@
             const errEl = document.getElementById('auth-error');
             const btn = document.getElementById('auth-submit-btn');
 
+            if (!supabaseClient) {
+                errEl.style.color = 'var(--accent-red)';
+                errEl.textContent = 'Cannot reach the server. Refresh and try again.';
+                return;
+            }
             if (!email || !password) { errEl.textContent = 'Please fill in all fields.'; return; }
             if (password.length < 6) { errEl.textContent = 'Password must be 6+ characters.'; return; }
 
