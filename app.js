@@ -5379,8 +5379,14 @@
                 if (!onlineState.roomId) { clearInterval(onlineState._pollInterval); return; }
                 if (gameState.isRunning) { clearInterval(onlineState._pollInterval); return; }
                 try {
-                    const { data } = await supabaseClient
-                        .from('sudoku_rooms').select('state').eq('id', roomId).single();
+                    const { data, error } = await supabaseClient
+                        .from('sudoku_rooms').select('state').eq('id', roomId).maybeSingle();
+                    if (error) {
+                        console.warn('[Realtime] room polling failed:', error);
+                        return;
+                    }
+                    // The room can be removed after a failed/expired match. A missing row
+                    // is normal during cleanup, so do not turn it into a PostgREST 406.
                     if (data?.state) handleRoomUpdate(data.state);
                 } catch(e) { /* ignore */ }
             }, 2000);
