@@ -5670,23 +5670,24 @@
 
             // onAuthStateChange fires immediately with INITIAL_SESSION if a session exists.
             // We rely on this single path to avoid race conditions with getSession().
-            supabaseClient.auth.onAuthStateChange(async (event, session) => {
+            // Keep Supabase API calls outside the auth callback. Async work inside
+            // onAuthStateChange can hold the auth lock and stall later requests.
+            supabaseClient.auth.onAuthStateChange((event, session) => {
+                queueMicrotask(() => handleAuthStateChange(event, session));
+            });
+        }
+
+        async function handleAuthStateChange(event, session) {
                 console.log('[Auth] event:', event, session?.user?.email);
                 currentUser = session?.user || null;
 
-                // No session at all (first visit, or fully signed out) — sign in
-                // anonymously so this device still gets a stable, real auth.uid().
-                // This lets matchmaking/rooms/presence rely on real row-ownership
-                // RLS instead of trusting client-supplied "guest_..." ids.
-                if (!currentUser && (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT')) {
-                    const { data, error } = await supabaseClient.auth.signInAnonymously();
-                    if (error) {
-                        console.error('[Auth] anonymous sign-in failed:', error.message);
-                    } else {
-                        // onAuthStateChange will fire again with the new anonymous
-                        // session (event: 'SIGNED_IN'), which re-enters this handler.
-                        return;
-                    }
+                // A first-time visitor may use an anonymous auth identity for online
+                // play, but the database trigger must not create a public profile for it.
+                // Signing out deliberately does NOT silently sign the user back in.
+                if (!currentUser && event === 'INITIAL_SESSION') {
+                    const { error } = await supabaseClient.auth.signInAnonymously();
+                    if (error) console.error('[Auth] anonymous sign-in failed:', error.message);
+                    return;
                 }
 
                 if (currentUser) {
@@ -5715,7 +5716,6 @@
                         }
                     }
                 }
-            });
         }
 
         async function loadProfile(userId) {
@@ -5811,9 +5811,24 @@
             });
 
             document.getElementById('side-signout-btn').addEventListener('click', async () => {
-                await supabaseClient.auth.signOut();
-                document.getElementById('side-menu').classList.remove('active');
-                document.getElementById('side-menu-overlay').classList.remove('active');
+                const signoutBtn = document.getElementById('side-signout-btn');
+                if (!supabaseClient) { showToast('Authentication is not connected.', 2500); return; }
+                if (signoutBtn) signoutBtn.disabled = true;
+                try {
+                    const { error } = await supabaseClient.auth.signOut();
+                    if (error) throw error;
+                    currentUser = null;
+                    currentProfile = null;
+                    updateAuthUI(false);
+                    document.getElementById('side-menu').classList.remove('active');
+                    document.getElementById('side-menu-overlay').classList.remove('active');
+                    showToast('Signed out successfully.', 2000);
+                } catch (e) {
+                    console.error('[Auth] sign out failed:', e);
+                    showToast('Could not sign out: ' + (e.message || 'unknown error'), 3000);
+                } finally {
+                    if (signoutBtn) signoutBtn.disabled = false;
+                }
             });
 
             document.getElementById('auth-toggle-btn').addEventListener('click', () => {
@@ -5829,6 +5844,8 @@
             });
 
             document.getElementById('auth-submit-btn').addEventListener('click', handleAuthSubmit);
+            const avatarInput = document.getElementById('prof-avatar-file');
+            if (avatarInput) avatarInput.addEventListener('change', handleAvatarUpload);
             document.getElementById('auth-skip-btn').addEventListener('click', () => {
                 localStorage.setItem('sudoku_auth_skipped', '1');
                 document.getElementById('auth-modal').classList.remove('active');
@@ -5839,6 +5856,42 @@
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') handleAuthSubmit(); });
             });
+        }
+
+        async function handleAvatarUpload(event) {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (!file) return;
+            if (!supabaseClient || !currentUser || currentUser.is_anonymous) {
+                showToast('Sign in with an account before changing your profile photo.', 3000);
+                return;
+            }
+            if (!file.type.startsWith('image/')) { showToast('Choose an image file.', 2500); return; }
+            if (file.size > 3 * 1024 * 1024) { showToast('Image must be 3 MB or smaller.', 2500); return; }
+            const label = document.getElementById('prof-avatar-edit-lbl');
+            if (label) label.style.opacity = '0.5';
+            try {
+                const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+                const path = `${currentUser.id}/avatar.${ext}`;
+                const { error: uploadError } = await supabaseClient.storage.from('avatars').upload(path, file, {
+                    upsert: true, contentType: file.type, cacheControl: '3600'
+                });
+                if (uploadError) throw uploadError;
+                const { data: urlData } = supabaseClient.storage.from('avatars').getPublicUrl(path);
+                const avatarUrl = `${urlData.publicUrl}${urlData.publicUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+                const { data, error: profileError } = await supabaseClient.from('profiles')
+                    .update({ avatar_url: avatarUrl }).eq('id', currentUser.id).select('*').single();
+                if (profileError) throw profileError;
+                currentProfile = data;
+                updateAuthUI(true);
+                updateUIWithProfile();
+                showToast('Profile photo updated.', 2200);
+            } catch (e) {
+                console.error('[Avatar] upload failed:', e);
+                showToast('Could not update photo: ' + (e.message || 'check Supabase Storage setup'), 4000);
+            } finally {
+                if (label) label.style.opacity = '';
+            }
         }
 
         async function handleAuthSubmit() {

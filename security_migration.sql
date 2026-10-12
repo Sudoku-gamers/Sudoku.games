@@ -34,6 +34,10 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
+  -- Anonymous identities are for guest gameplay only, not registered profiles.
+  if coalesce(new.is_anonymous, false) then
+    return new;
+  end if;
   insert into public.profiles (id, username, rating)
   values (
     new.id,
@@ -282,3 +286,25 @@ alter publication supabase_realtime add table sudoku_rooms;
 alter publication supabase_realtime add table tournaments;
 alter publication supabase_realtime add table tournament_matches;
 alter publication supabase_realtime add table tournament_participants;
+
+
+-- ------------------------------------------------------------
+-- 7. Avatar uploads (run after creating a PUBLIC Storage bucket named 'avatars')
+-- Public read is intentional for profile pictures; uploads/updates are restricted
+-- to the signed-in user's own folder: <auth.uid()>/avatar.<extension>.
+-- ------------------------------------------------------------
+drop policy if exists "Public avatar images are readable" on storage.objects;
+create policy "Public avatar images are readable"
+  on storage.objects for select
+  using (bucket_id = 'avatars');
+
+drop policy if exists "Users upload their own avatar" on storage.objects;
+create policy "Users upload their own avatar"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "Users update their own avatar" on storage.objects;
+create policy "Users update their own avatar"
+  on storage.objects for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
