@@ -3,31 +3,30 @@
            ============================================ */
         
         :root {
-            /* Ink & Parchment: warm paper surfaces with readable dark ink */
-            color-scheme: light;
-            --bg-primary: #eee2ca;
-            --bg-secondary: #e3d2b2;
-            --bg-tertiary: #d8c3a0;
-            --bg-hover: #d0b995;
-            --bg-card: #f5ead5;
-
-            --text-primary: #30251c;
-            --text-bright: #241a12;
-            --text-muted: #65513d;
-
-            --accent-orange: #875523;
-            --accent-green: #46643a;
-            --accent-red: #a52c25;
-            --accent-blue: #245f91;
-
-            --board-light: #f4e8d0;
-            --board-dark: #d8c7a7;
-            --board-highlight: rgba(112, 139, 76, 0.34);
-
-            --p1-color: #245f91;
-            --p2-color: #9b5127;
-
-            --border-color: #b6a184;
+            /* Lichess color palette */
+            --bg-primary: #161512;
+            --bg-secondary: #262421;
+            --bg-tertiary: #302e2c;
+            --bg-hover: #3d3a37;
+            --bg-card: #262421;
+            
+            --text-primary: #bababa;
+            --text-bright: #ffffff;
+            --text-muted: #777777;
+            
+            --accent-orange: #d59020;
+            --accent-green: #769656;
+            --accent-red: #c33;
+            --accent-blue: #3692e7;
+            
+            --board-light: #f0d9b5;
+            --board-dark: #b58863;
+            --board-highlight: rgba(130, 200, 60, 0.5);
+            
+            --p1-color: #4a9eff;
+            --p2-color: #ff8c4a;
+            
+            --border-color: #3d3a37;
         }
 
         * {
@@ -3651,8 +3650,68 @@ button { border-color: #b7a583; }
 }
 
 
-/* Theme consistency and readability safeguards */
-button, input, select, textarea { font: inherit; }
-input, select, textarea { color: var(--text-primary); background-color: var(--bg-card); border-color: var(--border-color); }
-button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 3px solid var(--accent-blue); outline-offset: 2px; }
-::selection { color: #241a12; background: #d8b77e; }
+/* ── Newspaper desk for the Sudoku board ─────────────────────
+   The puzzle sits on a warm printed-paper sheet with a gentle lift.
+   Keep this decorative layer behind the canvas and never block input.
+   ──────────────────────────────────────────────────────────── */
+.board-container {
+  position: relative !important;
+  isolation: isolate;
+  overflow: visible !important;
+  background-color: #d7c6a4 !important;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(70, 49, 27, .035) 0, rgba(70, 49, 27, .035) 1px, transparent 1px, transparent 5px),
+    radial-gradient(ellipse at 50% 35%, #f4e8d0 0%, #e8d9bb 68%, #d2bd96 100%) !important;
+  border: 1px solid rgba(91, 67, 39, .28);
+  box-shadow: inset 0 0 34px rgba(78, 54, 29, .09);
+}
+.board-container::before {
+  content: "SUDOKU  •  THE DAILY PUZZLE";
+  position: absolute;
+  z-index: 0;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 24px);
+  color: rgba(65, 48, 30, .53);
+  font: 700 clamp(9px, 1.1vw, 12px)/1.2 Georgia, 'Times New Roman', serif;
+  letter-spacing: .16em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.board-container::after {
+  content: "DAILY EDITION  •  PUZZLE No. 001";
+  position: absolute;
+  z-index: 0;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 20px);
+  color: rgba(65, 48, 30, .45);
+  font: 600 9px/1.2 Georgia, 'Times New Roman', serif;
+  letter-spacing: .12em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+#sudoku-canvas {
+  position: relative;
+  z-index: 1;
+  border: 1px solid rgba(72, 49, 27, .55) !important;
+  border-radius: 2px !important;
+  box-shadow: 0 5px 0 rgba(84, 60, 35, .10), 0 13px 24px rgba(54, 39, 23, .22), 0 2px 5px rgba(54, 39, 23, .18) !important;
+  transform: translateY(-2px) rotate(-.18deg);
+  transform-origin: center center;
+  animation: newspaperBoardFloat 6s ease-in-out infinite;
+}
+@keyframes newspaperBoardFloat {
+  0%, 100% { transform: translateY(-2px) rotate(-.18deg); }
+  50% { transform: translateY(-5px) rotate(.12deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sudoku-canvas { animation: none !important; transform: none !important; }
+}
+@media (max-width: 520px) {
+  .board-container::before { top: 5px; letter-spacing: .09em; }
+  .board-container::after { bottom: 4px; font-size: 8px; letter-spacing: .06em; }
+  #sudoku-canvas { box-shadow: 0 3px 0 rgba(84,60,35,.1), 0 7px 14px rgba(54,39,23,.2) !important; }
+}
