@@ -6948,7 +6948,12 @@
                             loadVatarChallenges();
                         } catch (err) {
                             join.disabled = false; join.textContent = 'Review terms & Join';
-                            showToast('Could not join that challenge. It may have filled or expired. Refresh the list and try again.', 3500);
+                            const reason = err?.message || err?.code || '';
+                            showToast(reason === 'cannot_join_own_challenge'
+                                ? 'You published this challenge, so you cannot join it. A second player on another account must join.'
+                                : reason === 'challenge_unavailable'
+                                    ? 'That challenge has filled or expired. Refresh the list and try again.'
+                                    : 'Could not join that challenge (' + (err?.code || reason || 'unknown') + '). Refresh the list and try again.', 4500);
                             console.warn('[Vatar] challenge join failed:', err);
                             loadVatarChallenges();
                         }
