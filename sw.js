@@ -75,6 +75,9 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   if (url.protocol === 'chrome-extension:') return;
 
+  // Lagos Life SDK and API: never intercept or cache. The docs say to always load the SDK from them.
+  if (url.hostname === 'lagoslife.app' || url.hostname.endsWith('.lagoslife.app')) return;
+
   // Supabase API — network only (real-time), never cache
   if (url.hostname.includes('supabase.co')) {
     event.respondWith(fetch(request));

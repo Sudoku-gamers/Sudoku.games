@@ -1,0 +1,17 @@
+# Render Blueprint: runs the game AND its server together on one HTTPS address.
+services:
+  - type: web
+    name: sudoku-games
+    runtime: node
+    plan: free
+    buildCommand: echo "No build step needed"
+    startCommand: node server/server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Render will ask you to type these two in. They are never stored in GitHub.
+      - key: VATAR_SECRET
+        sync: false
+      - key: VATAR_RESULTS_SECRET
+        sync: false

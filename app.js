@@ -6841,6 +6841,52 @@
             return vatarEndGameBase(winner, reason);
         };
 
+        // In-page terms screen. window.confirm() is blocked inside the Lagos Life game frame
+        // (the frame has no allow-modals), so terms must be shown as part of the page itself.
+        const askTerms = (title, rows, confirmLabel) => new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px;';
+            const box = document.createElement('div');
+            box.style.cssText = 'width:100%;max-width:380px;max-height:90vh;overflow-y:auto;background:var(--bg-secondary,#1e1c19);color:var(--text-bright,#fff);border:1px solid rgba(213,144,32,.5);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;';
+            const heading = document.createElement('div');
+            heading.style.cssText = 'font-weight:800;font-size:1.1rem;';
+            heading.textContent = title;
+            box.append(heading);
+            rows.forEach(([label, value]) => {
+                const row = document.createElement('div');
+                const l = document.createElement('div');
+                l.style.cssText = 'font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.65;';
+                l.textContent = label;
+                const v = document.createElement('div');
+                v.style.cssText = 'font-size:.92rem;line-height:1.4;';
+                v.textContent = value;
+                row.append(l, v);
+                box.append(row);
+            });
+            const note = document.createElement('div');
+            note.style.cssText = 'font-size:.75rem;opacity:.7;';
+            note.textContent = 'By continuing you agree to these match terms.';
+            const buttons = document.createElement('div');
+            buttons.style.cssText = 'display:flex;gap:8px;';
+            const cancel = document.createElement('button');
+            cancel.className = 'action-btn btn-secondary';
+            cancel.style.flex = '1';
+            cancel.textContent = 'Cancel';
+            const ok = document.createElement('button');
+            ok.className = 'action-btn btn-primary';
+            ok.style.flex = '1';
+            ok.textContent = confirmLabel || 'Agree';
+            const finish = (answer) => { overlay.remove(); resolve(answer); };
+            cancel.addEventListener('click', () => finish(false));
+            ok.addEventListener('click', () => finish(true));
+            buttons.append(cancel, ok);
+            box.append(note, buttons);
+            overlay.append(box);
+            document.body.append(overlay);
+            ok.focus();
+        });
         const readChallengeSettings = () => {
             const mode = document.getElementById('vatar-challenge-mode')?.value === 'solveoff' ? 'solveoff' : 'simultaneous';
             const timeLimit = Math.max(60, Math.min(1200, Number(document.getElementById('vatar-challenge-time')?.value) || 600));
@@ -6877,8 +6923,14 @@
                     join.className = 'action-btn btn-primary';
                     join.textContent = 'Review terms & Join';
                     join.addEventListener('click', async () => {
-                        const terms = `Join this Sudoku challenge?\n\nMode: ${heading.textContent}\nTime limit: ${details.textContent.split(' · ')[0]}\nStake: No stake (friendly match)\n\nBy joining, you agree to these match terms.`;
-                        if (!window.confirm(terms)) return;
+                        const agreedToJoin = await askTerms('Join this challenge?', [
+                            ['Mode', heading.textContent],
+                            ['Time limit', details.textContent.split(' · ')[0]],
+                            ['Stake', 'No stake. This is a friendly match.'],
+                            ['How to win', challenge.mode === 'solveoff' ? 'You each solve your own copy of the same puzzle. First player to submit a fully correct solution wins. A wrong submission does not end your game.' : 'You share one board. Claim correct cells; the player with the most cells when time ends wins.'],
+                            ['If time runs out or someone leaves', 'No money is involved. The match ends without a prize.']
+                        ], 'Agree & Join');
+                        if (!agreedToJoin) return;
                         join.disabled = true; join.textContent = 'Joining…';
                         try {
                             const { session } = await V.session();
@@ -6912,7 +6964,12 @@
         const createVatarMatch = async () => {
             const settings = readChallengeSettings();
             const modeLabel = settings.mode === 'solveoff' ? 'Competitive Solve-Off' : 'Cell Capture';
-            const agreed = window.confirm(`Publish this challenge for other players?\n\nMode: ${modeLabel}\nTime limit: ${settings.timeLimit / 60} minutes\nStake: No stake (friendly match)\n\nOther players will see these terms and must agree before joining.`);
+            const agreed = await askTerms('Publish this challenge?', [
+                ['Mode', modeLabel],
+                ['Time limit', (settings.timeLimit / 60) + ' minutes'],
+                ['Stake', 'No stake. This is a friendly match.'],
+                ['Note', 'Other players will see these terms and must agree before joining. Unjoined challenges expire after 15 minutes.']
+            ], 'Publish');
             if (!agreed) return;
             const createButton = document.getElementById('vatar-create-match');
             if (createButton) { createButton.disabled = true; createButton.textContent = 'Publishing…'; }
@@ -6939,7 +6996,11 @@
         };
         const quickVatarMatch = async () => {
             readChallengeSettings();
-            const agreed = window.confirm(`Find a friendly Sudoku match?\n\nMode: ${gameState.gameMode === 'solveoff' ? 'Competitive Solve-Off' : 'Cell Capture'}\nTime limit: ${gameState.timeLimit / 60} minutes\nStake: No stake\n\nBy continuing, you agree to these match terms.`);
+            const agreed = await askTerms('Find a friendly match?', [
+                ['Mode', gameState.gameMode === 'solveoff' ? 'Competitive Solve-Off' : 'Cell Capture'],
+                ['Time limit', (gameState.timeLimit / 60) + ' minutes'],
+                ['Stake', 'No stake. This is a friendly match.']
+            ], 'Continue');
             if (!agreed) return;
             try {
                 setStatus('Finding an opponent…');
