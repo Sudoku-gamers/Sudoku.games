@@ -1287,6 +1287,42 @@ create policy "public rw" on sudoku_rooms
         </div>
     </div>
 
+    <!-- Newspaper edition reader for Endless Story Mode -->
+    <div class="modal-overlay" id="story-edition-modal" role="dialog" aria-modal="true" aria-labelledby="story-edition-masthead" aria-hidden="true">
+        <div class="story-edition-shell">
+            <button id="story-edition-close" class="story-edition-close" type="button" aria-label="Close newspaper edition">×</button>
+            <div class="story-edition-paper" id="story-edition-paper">
+                <div class="story-edition-topline"><span>THE SUDOKU ARCHIVE</span><span id="story-edition-date">WEDNESDAY, 7 JANUARY 1981</span></div>
+                <header class="story-edition-brand"><div class="story-edition-brand-small">NIGERIA'S NEWSPAPER JOURNEY</div><h2 id="story-edition-masthead">THE PUNCH</h2><div class="story-edition-subline"><span>INDEPENDENT MINDS · CURIOUS READERS</span><span id="story-edition-number">FIRST EDITION · NO. 001</span></div></header>
+                <div id="story-edition-front" class="story-edition-page">
+                    <div class="story-edition-stamp">ARCHIVE EDITION</div>
+                    <div class="story-edition-kicker" id="story-edition-kicker">NIGERIA · ECONOMY</div>
+                    <h3 id="story-edition-headline">Nigeria's economy faces a difficult year</h3>
+                    <p class="story-edition-deck" id="story-edition-deck">A look back at the economic pressures facing the country in 1981.</p>
+                    <div class="story-edition-columns"><p id="story-edition-preview">Turn the page and step into a moment in Nigeria's past.</p><div class="story-edition-sidebox"><strong>INSIDE THIS EDITION</strong><span>THE STORY</span><span>THE ARCHIVE NOTE</span><span>THE SUDOKU PUZZLE</span></div></div>
+                    <p class="story-edition-source" id="story-edition-source">Historical context reconstructed from documented sources. This is not a facsimile of an original newspaper page.</p>
+                </div>
+                <div id="story-edition-article" class="story-edition-page story-edition-article" hidden>
+                    <div class="story-edition-kicker">FROM THE ARCHIVE · A SHORT READ</div>
+                    <h3 id="story-edition-article-title">A country at an economic crossroads</h3>
+                    <p id="story-edition-article-copy"></p>
+                    <p id="story-edition-article-copy-2"></p>
+                    <aside class="story-edition-archive-note" id="story-edition-archive-note"></aside>
+                    <div class="story-edition-page-number">PAGE 2 · THE STORY</div>
+                </div>
+                <div id="story-edition-puzzle-teaser" class="story-edition-page story-edition-puzzle-teaser" hidden>
+                    <div class="story-edition-kicker">PAGE 3 · THE PUZZLE DESK</div>
+                    <h3>Every story has a missing piece.</h3>
+                    <p>The news has been read. Now put your powers of deduction to work. Complete the Sudoku printed in this edition to continue your newspaper journey.</p>
+                    <div class="story-edition-mini-grid" aria-hidden="true"> <span>8</span><span></span><span>3</span><span></span><span>5</span><span></span><span>1</span><span></span><span>9</span><span></span><span>7</span><span></span><span>2</span><span></span><span>6</span><span></span><span>4</span><span></span><span>5</span><span></span><span>1</span><span></span><span>8</span><span></span><span>3</span><span></span><span>7</span></div>
+                    <div class="story-edition-page-number">PAGE 3 · PUZZLE</div>
+                </div>
+                <footer class="story-edition-footer"><span id="story-edition-footer-left">THE PUNCH · ARCHIVE COLLECTION</span><span id="story-edition-footer-right">READ · REFLECT · SOLVE</span></footer>
+            </div>
+            <div class="story-edition-controls"><div id="story-edition-step-label">FRONT PAGE · STEP 1 OF 3</div><button id="story-edition-next" type="button">READ THE STORY →</button></div>
+        </div>
+    </div>
+
     <!-- Penalty toast -->
     <div id="penalty-toast"></div>
 

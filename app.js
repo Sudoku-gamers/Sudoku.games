@@ -1649,9 +1649,106 @@
             renderStoryMap();
             document.getElementById('story-map-modal')?.classList.add('active');
         }
-        function startStoryLevel(level) {
+        let storyEditionLevel = 1;
+        let storyEditionStep = 0;
+        const STORY_EDITION_FEATURES = {
+            1: {
+                date: 'WEDNESDAY, 7 JANUARY 1981',
+                kicker: 'NIGERIA · ECONOMY',
+                headline: "Nigeria's economy faces a difficult year",
+                deck: 'A look back at the economic pressures facing the country in 1981.',
+                preview: 'Nigeria entered 1981 amid shifting economic conditions. Petroleum remained central to the national economy, while industrial production and prices were under pressure.',
+                articleTitle: 'A country at an economic crossroads',
+                article: 'The year 1981 brought serious economic pressures for Nigeria. The Central Bank of Nigeria’s annual report recorded a decline in industrial production, driven largely by weaker mining output, particularly petroleum. At the same time, consumer prices rose sharply.',
+                article2: 'These figures tell a story of a country navigating changing oil revenues, production challenges and the everyday effects of inflation. This edition invites you to pause with that historical moment before turning to a different kind of challenge: finding order in a grid of numbers.',
+                note: 'ARCHIVE NOTE: This is a newly written historical summary, not a verbatim headline or article from The Punch. The date identifies a documented Punch issue in the National Library of Nigeria’s newspaper locator; the economic context is based on the Central Bank of Nigeria’s 1981 annual report.'
+            }
+        };
+        function storyEditionContent(level) {
+            const paper = storyNewspaper(level);
+            if (STORY_EDITION_FEATURES[level]) return STORY_EDITION_FEATURES[level];
+            const year = level <= 5 ? 1981 : level <= 12 ? 1982 : level <= 22 ? 1983 : level <= 35 ? 1984 : 1985 + Math.floor((level - 36) / 5);
+            return {
+                date: `ARCHIVE JOURNEY · ${year}`,
+                kicker: `NIGERIA · ${paper.name.toUpperCase()}`,
+                headline: `The ${paper.name} puzzle desk: issue ${String(level).padStart(3, '0')}`,
+                deck: `A new chapter in your journey through Nigerian newspapers and puzzles.`,
+                preview: `This is a game-created newspaper feature inspired by the era, not a reproduced historical article. Read the edition note, then turn the page to find the puzzle hidden inside.`,
+                articleTitle: `A new page in the archive`,
+                article: `Every newspaper preserves a moment: the questions people asked, the events they followed, and the details that mattered to their communities. In this game-created feature, ${paper.name} marks your next stop in the archive journey.`,
+                article2: `The historical setting is an editorial backdrop for the game, not a claim that this text appeared in the original publication. Your task now is to solve the puzzle and earn the next page in your collection.`,
+                note: 'ARCHIVE NOTE: This is fictional game copy, not a historical headline or a reproduced newspaper article.'
+            };
+        }
+        function openStoryEdition(level) {
             if (level > storyProgress.unlocked) return;
+            storyEditionLevel = level;
+            storyEditionStep = 0;
+            const paper = storyNewspaper(level);
+            const content = storyEditionContent(level);
+            const modal = document.getElementById('story-edition-modal');
             document.getElementById('story-map-modal')?.classList.remove('active');
+            document.getElementById('story-edition-masthead').textContent = paper.name.toUpperCase();
+            document.getElementById('story-edition-date').textContent = content.date;
+            document.getElementById('story-edition-number').textContent = `EDITION ${String(level).padStart(3, '0')} · LEVEL ${level}`;
+            document.getElementById('story-edition-kicker').textContent = content.kicker;
+            document.getElementById('story-edition-headline').textContent = content.headline;
+            document.getElementById('story-edition-deck').textContent = content.deck;
+            document.getElementById('story-edition-preview').textContent = content.preview;
+            document.getElementById('story-edition-source').textContent = content.note;
+            document.getElementById('story-edition-article-title').textContent = content.articleTitle;
+            document.getElementById('story-edition-article-copy').textContent = content.article;
+            document.getElementById('story-edition-article-copy-2').textContent = content.article2;
+            document.getElementById('story-edition-archive-note').textContent = content.note;
+            document.getElementById('story-edition-footer-left').textContent = `${paper.name.toUpperCase()} · ARCHIVE COLLECTION`;
+            document.getElementById('story-edition-footer-right').textContent = `LEVEL ${level} · ${storyDifficulty(level).toUpperCase()}`;
+            document.getElementById('story-edition-front').hidden = false;
+            document.getElementById('story-edition-article').hidden = true;
+            document.getElementById('story-edition-puzzle-teaser').hidden = true;
+            document.getElementById('story-edition-paper').classList.remove('page-turning');
+            modal?.classList.add('active');
+            modal?.setAttribute('aria-hidden', 'false');
+            updateStoryEditionControls();
+        }
+        function updateStoryEditionControls() {
+            const label = document.getElementById('story-edition-step-label');
+            const button = document.getElementById('story-edition-next');
+            if (!label || !button) return;
+            if (storyEditionStep === 0) { label.textContent = 'FRONT PAGE · STEP 1 OF 3'; button.textContent = 'READ THE STORY →'; }
+            else if (storyEditionStep === 1) { label.textContent = 'THE STORY · STEP 2 OF 3'; button.textContent = 'TURN TO THE PUZZLE →'; }
+            else { label.textContent = 'PUZZLE PAGE · STEP 3 OF 3'; button.textContent = 'START THIS PUZZLE →'; }
+        }
+        function advanceStoryEdition() {
+            const paper = document.getElementById('story-edition-paper');
+            if (!paper) return;
+            if (storyEditionStep === 2) {
+                const modal = document.getElementById('story-edition-modal');
+                modal?.classList.remove('active');
+                modal?.setAttribute('aria-hidden', 'true');
+                startStoryPuzzle(storyEditionLevel);
+                return;
+            }
+            paper.classList.remove('page-turning');
+            void paper.offsetWidth;
+            paper.classList.add('page-turning');
+            window.setTimeout(() => {
+                storyEditionStep += 1;
+                document.getElementById('story-edition-front').hidden = storyEditionStep !== 0;
+                document.getElementById('story-edition-article').hidden = storyEditionStep !== 1;
+                document.getElementById('story-edition-puzzle-teaser').hidden = storyEditionStep !== 2;
+                updateStoryEditionControls();
+            }, 180);
+        }
+        function closeStoryEdition() {
+            document.getElementById('story-edition-modal')?.classList.remove('active');
+            document.getElementById('story-edition-modal')?.setAttribute('aria-hidden', 'true');
+            openStoryMap();
+        }
+        function startStoryLevel(level) {
+            openStoryEdition(level);
+        }
+        function startStoryPuzzle(level) {
+            if (level > storyProgress.unlocked) return;
             gameState.storyLevel = level;
             gameState.storyModeActive = true;
             gameState.isDailyChallenge = false;
@@ -1665,8 +1762,8 @@
             startGame();
             const label = document.getElementById('game-mode-label');
             const paper = storyNewspaper(level);
-            if (label) label.textContent = `Story Mode · ${paper.name} · Level ${level}`;
-            showToast(`📰 ${paper.name} · Level ${level} · ${gameState.difficulty.toUpperCase()}`, 2200);
+            if (label) label.textContent = `Story Mode · ${paper.name} · Edition ${level}`;
+            showToast(`📰 ${paper.name} · Edition ${level} · ${gameState.difficulty.toUpperCase()}`, 2200);
         }
         function finishStoryLevel() {
             const level = Number(gameState.storyLevel) || 1;
@@ -1822,6 +1919,9 @@
             });
             document.getElementById('story-mode-btn')?.addEventListener('click', openStoryMap);
             document.getElementById('story-map-close')?.addEventListener('click', () => document.getElementById('story-map-modal')?.classList.remove('active'));
+            document.getElementById('story-edition-next')?.addEventListener('click', advanceStoryEdition);
+            document.getElementById('story-edition-close')?.addEventListener('click', closeStoryEdition);
+            document.getElementById('story-edition-modal')?.addEventListener('click', e => { if (e.target.id === 'story-edition-modal') closeStoryEdition(); });
             document.getElementById('story-map-modal')?.addEventListener('click', e => { if (e.target.id === 'story-map-modal') e.currentTarget.classList.remove('active'); });
 
             // Inject Daily Challenge button into lobby if not already there
