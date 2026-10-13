@@ -1585,6 +1585,15 @@
         // ENDLESS STORY MODE — locally saved progression
         // ============================================
         const STORY_SAVE_KEY = 'sudoku_endless_story_v1';
+        // Newspaper-inspired story chapters. Difficulty is determined by Sudoku logic,
+        // never by a newspaper's credibility or popularity.
+        const STORY_NEWSPAPERS = [
+            { name: 'The Punch', short: 'PUNCH', edition: 'The Daily Grind', region: 'Lagos', intro: 'Build confidence with approachable puzzles.', start: 1, end: 5, difficulty: 'easy', mark: 'P' },
+            { name: 'Vanguard', short: 'VANGUARD', edition: 'The Newsroom', region: 'Lagos', intro: 'Sharper patterns and more careful deduction.', start: 6, end: 12, difficulty: 'medium', mark: 'V' },
+            { name: 'The Guardian', short: 'GUARDIAN', edition: 'The Editorial Desk', region: 'Lagos', intro: 'Longer chains of logic for patient solvers.', start: 13, end: 22, difficulty: 'hard', mark: 'G' },
+            { name: 'THISDAY', short: 'THISDAY', edition: 'The Front Page Challenge', region: 'Lagos', intro: 'A demanding edition for experienced players.', start: 23, end: 35, difficulty: 'extreme', mark: 'T' },
+            { name: 'Daily Trust', short: 'DAILY TRUST', edition: 'The National Edition', region: 'Abuja', intro: 'Keep the streak alive as the endless run grows.', start: 36, end: Infinity, difficulty: 'extreme', mark: 'D' }
+        ];
         let storyProgress = loadStoryProgress();
         function loadStoryProgress() {
             try {
@@ -1603,22 +1612,31 @@
             if (level <= 22) return 'hard';
             return 'extreme';
         }
+        function storyNewspaper(level) {
+            return STORY_NEWSPAPERS.find(paper => level >= paper.start && level <= paper.end) || STORY_NEWSPAPERS[STORY_NEWSPAPERS.length - 1];
+        }
         function renderStoryMap() {
             storyProgress = loadStoryProgress();
             saveStoryProgress();
             const map = document.getElementById('story-level-map');
             if (!map) return;
+            const currentPaper = storyNewspaper(storyProgress.unlocked);
+            const paperPanel = document.getElementById('story-newspaper-feature');
+            if (paperPanel) {
+                paperPanel.innerHTML = `<div class="story-paper-masthead"><span class="story-paper-mark">${currentPaper.mark}</span><div><div class="story-paper-kicker">CURRENT EDITION · ${currentPaper.region.toUpperCase()}</div><h3>${currentPaper.name}</h3><p>${currentPaper.edition}</p></div></div><div class="story-paper-meta"><span>${currentPaper.start === 1 ? 'LEVELS 1–5' : `LEVELS ${currentPaper.start}–${currentPaper.end === Infinity ? '∞' : currentPaper.end}`}</span><span>${currentPaper.difficulty.toUpperCase()} EDITION</span></div><p class="story-paper-intro">${currentPaper.intro}</p>`;
+            }
             const levelCount = Math.max(40, storyProgress.unlocked + 12);
             map.innerHTML = '';
             for (let level = 1; level <= levelCount; level++) {
                 const unlocked = level <= storyProgress.unlocked;
                 const stars = Math.max(0, Math.min(3, Number(storyProgress.stars[level]) || 0));
+                const paper = storyNewspaper(level);
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'story-level' + (unlocked ? ' unlocked' : ' locked') + (level === storyProgress.unlocked ? ' current' : '');
                 button.disabled = !unlocked;
-                button.innerHTML = `<strong>${unlocked ? level : '🔒'}</strong><span>${storyDifficulty(level).toUpperCase()}</span><span class="story-stars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</span>`;
-                button.setAttribute('aria-label', unlocked ? `Play level ${level}, ${storyDifficulty(level)}, ${stars} stars` : `Level ${level} locked`);
+                button.innerHTML = `<span class="story-level-paper">${paper.short}</span><strong>${unlocked ? level : '🔒'}</strong><span>${storyDifficulty(level).toUpperCase()}</span><span class="story-stars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</span>`;
+                button.setAttribute('aria-label', unlocked ? `Play level ${level}, ${paper.name}, ${storyDifficulty(level)}, ${stars} stars` : `Level ${level} locked, ${paper.name}`);
                 if (unlocked) button.addEventListener('click', () => startStoryLevel(level));
                 map.appendChild(button);
             }
@@ -1646,8 +1664,9 @@
             document.querySelectorAll('.mode-card[data-mode]').forEach(card => card.classList.remove('active'));
             startGame();
             const label = document.getElementById('game-mode-label');
-            if (label) label.textContent = `Story Mode · Level ${level}`;
-            showToast(`🗺️ Story Level ${level} · ${gameState.difficulty.toUpperCase()}`, 2200);
+            const paper = storyNewspaper(level);
+            if (label) label.textContent = `Story Mode · ${paper.name} · Level ${level}`;
+            showToast(`📰 ${paper.name} · Level ${level} · ${gameState.difficulty.toUpperCase()}`, 2200);
         }
         function finishStoryLevel() {
             const level = Number(gameState.storyLevel) || 1;
@@ -1663,7 +1682,9 @@
             saveStoryProgress();
             gameState.storyLevel = null;
             gameState.storyModeActive = false;
-            showToast(`⭐ Level ${level} cleared · ${stars} star${stars === 1 ? '' : 's'} · Level ${level + 1} unlocked!`, 3500);
+            const nextPaper = storyNewspaper(level + 1);
+            const changedPaper = storyNewspaper(level).name !== nextPaper.name;
+            showToast(`⭐ Level ${level} cleared · ${stars} star${stars === 1 ? '' : 's'} · ${changedPaper ? nextPaper.name + ' unlocked!' : 'Level ' + (level + 1) + ' unlocked!'}`, 3500);
         }
 
         // ============================================
