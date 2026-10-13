@@ -105,6 +105,26 @@ function mime(file) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (url.pathname === '/api/daily-news' && req.method === 'GET') {
+      // Fetch a previous-day news result through the server to avoid browser CORS.
+      // Return only a publisher-linked headline; if the feed is unavailable, the client shows a clear fallback.
+      try {
+        const yesterday = new Date(Date.now() - 86400000);
+        const day = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent('Nigeria when:' + day)}&hl=en-NG&gl=NG&ceid=NG:en`;
+        const feedResponse = await fetch(rssUrl, { headers: { 'User-Agent': 'SudokuLife/1.0 news-reader' }, signal: AbortSignal.timeout(4500) });
+        if (!feedResponse.ok) return send(res, 502, { error: 'news_feed_unavailable' });
+        const xml = await feedResponse.text();
+        const item = xml.match(/<item>([\s\S]*?)<\/item>/i)?.[1];
+        if (!item) return send(res, 404, { error: 'no_headline_for_previous_day' });
+        const decode = (value) => value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
+        const field = (name) => decode(item.match(new RegExp(`<${name}>([\s\S]*?)<\/${name}>`, 'i'))?.[1] || '');
+        const title = field('title'); const articleUrl = field('link'); const description = field('description');
+        const source = decode(item.match(/<source[^>]*>([\s\S]*?)<\/source>/i)?.[1] || 'Google News publisher feed');
+        if (!title || !/^https?:\/\//i.test(articleUrl)) return send(res, 404, { error: 'no_verified_headline' });
+        return send(res, 200, { date: day, title, description: description.replace(/<[^>]+>/g, ' ').slice(0, 500), url: articleUrl, source });
+      } catch (_) { return send(res, 502, { error: 'news_feed_unavailable' }); }
+    }
     if (url.pathname === '/api/vatar/challenges' && req.method === 'GET') {
       const now = Date.now();
       for (const [id, item] of publicChallenges) {

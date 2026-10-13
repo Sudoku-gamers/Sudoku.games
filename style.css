@@ -3758,3 +3758,34 @@ button { border-color: #b7a583; }
 #tournament-detail-modal,
 #lobby-tournaments-list,
 .section-label:has(+ #lobby-tournaments-list) { display: none !important; }
+
+
+/* Sudoku Life appearance controls: readable newspaper-inspired light mode */
+:root[data-appearance="light"] {
+ --bg-primary:#f3ead6; --bg-secondary:#e8dcc2; --bg-tertiary:#ddd0b5; --bg-hover:#d2c3a4; --bg-card:#eee3cd;
+ --text-primary:#39342b; --text-bright:#171511; --text-muted:#766b59; --border-color:#c7b89a;
+ --accent-orange:#94631a; --accent-green:#4f7040; --accent-blue:#28689b;
+}
+:root[data-appearance="light"] body { background:var(--bg-primary); color:var(--text-primary); }
+:root[data-appearance="light"] .header, :root[data-appearance="light"] .side-menu { background:var(--bg-secondary); color:var(--text-primary); }
+:root[data-appearance="light"] .side-menu-item, :root[data-appearance="light"] .friends-tab { color:var(--text-primary); }
+.appearance-toggle { border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-bright); border-radius:9px; padding:9px 12px; font-weight:700; cursor:pointer; }
+.friends-tabs .friends-tab { border:1px solid var(--border-color); border-radius:8px; padding:10px 12px; margin:4px; background:var(--bg-card); color:var(--text-primary); transition:background .15s,border-color .15s; }
+.friends-tabs .friends-tab.active { background:var(--accent-orange); color:#fff; border-color:var(--accent-orange); box-shadow:0 2px 0 rgba(0,0,0,.12); }
+.friends-tabs .friends-tab:focus-visible, .appearance-toggle:focus-visible { outline:3px solid var(--accent-blue); outline-offset:2px; }
+.daily-newspaper-modal { position:fixed; inset:0; z-index:10050; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(16,14,11,.78); }
+.daily-newspaper-modal[hidden] { display:none !important; }
+.daily-newspaper-sheet { width:min(620px,100%); max-height:90vh; overflow:auto; padding:clamp(20px,5vw,38px); color:#211d16; background:#f2e7cf; border:1px solid #b5a17b; box-shadow:0 22px 70px #0008; font-family:Georgia,'Times New Roman',serif; }
+.daily-paper-masthead { font-size:clamp(2rem,8vw,3.4rem); line-height:1; font-weight:900; letter-spacing:-.06em; text-align:center; }
+.daily-paper-masthead span { display:block; font:700 .65rem Arial,sans-serif; letter-spacing:.16em; margin-top:8px; }
+.daily-paper-rule { border-top:4px double #211d16; margin:16px 0; }
+.daily-paper-kicker { font:700 .72rem Arial,sans-serif; letter-spacing:.14em; margin-bottom:10px; }
+.daily-newspaper-sheet h2 { font-size:clamp(1.4rem,5vw,2.2rem); margin:0 0 14px; }
+.daily-paper-headline { font-size:1.25rem; font-weight:700; line-height:1.35; margin-bottom:12px; }
+.daily-paper-summary,.daily-paper-source { line-height:1.55; margin-bottom:12px; }
+.daily-paper-source { font: .8rem Arial,sans-serif; color:#665a46; overflow-wrap:anywhere; }
+.daily-paper-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:10px; margin-top:22px; }
+.daily-paper-actions button { padding:11px 14px; border:1px solid #6b5a3f; border-radius:4px; cursor:pointer; font-weight:700; background:#e4d5b7; color:#211d16; }
+.daily-paper-actions #daily-paper-play { background:#28241c; color:#f7eedc; }
+.user-btn { cursor:pointer; }
+@media (prefers-reduced-motion:reduce) { .friends-tabs .friends-tab { transition:none; } }

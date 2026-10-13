@@ -6595,6 +6595,67 @@
         };
 
         function init() {
+            // Global appearance preference (kept separate from the Sudoku board palette).
+            const applyAppearance = (mode) => {
+                const value = mode === 'light' ? 'light' : 'dark';
+                document.documentElement.dataset.appearance = value;
+                const toggle = document.getElementById('appearance-toggle');
+                if (toggle) { toggle.textContent = value === 'light' ? '☀ Light mode' : '☾ Dark mode'; toggle.setAttribute('aria-pressed', String(value === 'dark')); }
+                try { localStorage.setItem('sudoku_life_appearance', value); } catch (_) {}
+            };
+            let savedAppearance = 'dark';
+            try { savedAppearance = localStorage.getItem('sudoku_life_appearance') || 'dark'; } catch (_) {}
+            applyAppearance(savedAppearance);
+            document.getElementById('appearance-toggle')?.addEventListener('click', () => applyAppearance(document.documentElement.dataset.appearance === 'light' ? 'dark' : 'light'));
+            // Make the decorative top-right player figurine a useful shortcut.
+            document.querySelector('.user-btn')?.addEventListener('click', () => document.querySelector('[data-page="profile"]')?.click());
+            document.getElementById('side-menu-user-section')?.addEventListener('click', () => { document.querySelector('[data-page="profile"]')?.click(); document.getElementById('side-menu')?.classList.remove('active'); document.getElementById('side-menu-overlay')?.classList.remove('active'); });
+            // In-app/browser Back support: return to the previous app page when possible.
+            const appBackStack = [];
+            document.addEventListener('click', (event) => {
+                const nav = event.target.closest('[data-page]');
+                if (nav && nav.dataset.page) { appBackStack.push(nav.dataset.page); if (appBackStack.length > 30) appBackStack.shift(); }
+            }, true);
+            if (!window.__sudokuLifeBackBound) {
+                window.__sudokuLifeBackBound = true;
+                history.replaceState({ sudokuLife: true }, '', location.href);
+                history.pushState({ sudokuLife: true, page: 'lobby' }, '', location.href);
+                window.addEventListener('popstate', () => {
+                    const modal = document.querySelector('.modal.active, .daily-newspaper-modal:not([hidden])');
+                    if (modal) { modal.classList.remove('active'); modal.hidden = true; history.pushState({ sudokuLife: true }, '', location.href); return; }
+                    const game = document.getElementById('game-screen');
+                    if (game && game.classList.contains('active')) { document.getElementById('back-to-lobby-btn')?.click(); }
+                    else { document.querySelector('[data-page="lobby"]')?.click(); }
+                    history.pushState({ sudokuLife: true }, '', location.href);
+                });
+            }
+            // Daily Challenge newspaper reader. News is loaded from the app's optional server endpoint;
+            // never invent a headline when a verified source cannot be reached.
+            const dailyPaper = document.getElementById('daily-newspaper-modal');
+            const openDailyPaper = async () => {
+                if (!dailyPaper) { window.launchDailyChallenge?.(); return; }
+                const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+                document.getElementById('daily-paper-date').textContent = yesterday.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'}).toUpperCase();
+                document.getElementById('daily-paper-headline').textContent = 'Yesterday’s verified headline is not available right now.';
+                document.getElementById('daily-paper-summary').textContent = 'The Sudoku is ready. News will appear here when a trusted news feed is connected.';
+                document.getElementById('daily-paper-source').textContent = 'No headline displayed rather than showing unverified news.';
+                dailyPaper.hidden = false;
+                try {
+                    const response = await fetch('/api/daily-news', {headers:{'Accept':'application/json'}});
+                    if (response.ok) {
+                        const news = await response.json();
+                        if (news && news.title && news.url) {
+                            document.getElementById('daily-paper-headline').textContent = news.title;
+                            document.getElementById('daily-paper-summary').textContent = news.description || 'Read the full report from the publisher, then turn the page for Sudoku.';
+                            const source = document.getElementById('daily-paper-source'); source.textContent = 'Source: ' + (news.source || 'Publisher');
+                            const link = document.createElement('a'); link.href = news.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = ' Read original report'; source.appendChild(link);
+                        }
+                    }
+                } catch (_) { /* offline: keep the honest fallback */ }
+            };
+            document.getElementById('daily-paper-close')?.addEventListener('click', () => { dailyPaper.hidden = true; });
+            document.getElementById('daily-paper-play')?.addEventListener('click', () => { dailyPaper.hidden = true; window.launchDailyChallenge?.(); });
+            document.addEventListener('click', (event) => { if (event.target.closest('#daily-challenge-lobby-btn')) { event.preventDefault(); event.stopImmediatePropagation(); openDailyPaper(); } }, true);
             // Failsafe: never leave the user stuck on the splash if a later step throws.
             setTimeout(() => { try { hideSplash(); } catch (_) {} }, 4000);
             loadPlayerData();

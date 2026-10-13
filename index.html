@@ -324,7 +324,7 @@ create policy "public rw" on sudoku_rooms
             <!-- Action Buttons -->
             <button class="action-btn btn-primary" id="start-game-btn" aria-hidden="true" tabindex="-1">Create a Game (Local)</button>
             <button class="action-btn btn-secondary" id="solo-sudoku-btn">🧩 Solo Sudoku</button>
-            <button class="action-btn btn-secondary" id="story-mode-btn" style="margin-top:8px;background:linear-gradient(135deg,#202b3b,#172132);border:1px solid rgba(86,211,100,.4);color:#8be69a;">🗺️ Endless Story Mode <span id="story-progress-summary" style="margin-left:auto;font-size:.75rem;opacity:.8;">Level 1</span></button>
+            <button class="action-btn btn-secondary" id="story-mode-btn" style="margin-top:8px;background:linear-gradient(135deg,#202b3b,#172132);border:1px solid rgba(86,211,100,.4);color:#8be69a;">🗞️ Story Mode <span id="story-progress-summary" style="margin-left:auto;font-size:.75rem;opacity:.8;">Level 1</span></button>
 
             <!-- Stats -->
             <div class="stats-bar">
@@ -381,6 +381,10 @@ create policy "public rw" on sudoku_rooms
 
             <div class="settings-group">
                 <div class="settings-group-title">Game Preferences</div>
+                <div class="setting-item">
+                    <div class="setting-info"><div class="setting-label">Appearance</div><div class="setting-desc">Switch between light parchment and dark ink</div></div>
+                    <button type="button" class="appearance-toggle" id="appearance-toggle" aria-pressed="false">☾ Dark mode</button>
+                </div>
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Board Theme</div>
@@ -1270,13 +1274,13 @@ create policy "public rw" on sudoku_rooms
         </div>
     </div>
 
-    <!-- Endless Story Mode map -->
+    <!-- Story Mode map -->
     <div class="modal-overlay" id="story-map-modal" role="dialog" aria-modal="true" aria-labelledby="story-map-title">
         <div class="modal-card story-map-card">
             <button id="story-map-close" aria-label="Close story map" style="align-self:flex-end;margin:12px 14px 0 0;width:34px;height:34px;border:1px solid #344154;border-radius:50%;background:#1b2635;color:#e7edf7;font-size:1.35rem;cursor:pointer;">×</button>
             <div class="story-map-header">
                 <div class="story-map-kicker">SUDOKU ADVENTURE</div>
-                <h2 id="story-map-title">Endless Story Mode</h2>
+                <h2 id="story-map-title">Story Mode</h2>
                 <p>Clear each puzzle to unlock the next stop. Levels get harder as your journey continues.</p>
                 <div class="story-progress-track"><div id="story-progress-fill"></div></div>
                 <div id="story-progress-label" class="story-progress-label">Level 1 unlocked</div>
@@ -1287,7 +1291,7 @@ create policy "public rw" on sudoku_rooms
         </div>
     </div>
 
-    <!-- Newspaper edition reader for Endless Story Mode -->
+    <!-- Newspaper edition reader for Story Mode -->
     <div class="modal-overlay" id="story-edition-modal" role="dialog" aria-modal="true" aria-labelledby="story-edition-masthead" aria-hidden="true">
         <div class="story-edition-shell">
             <button id="story-edition-close" class="story-edition-close" type="button" aria-label="Close newspaper edition">×</button>
