@@ -6989,6 +6989,10 @@
                 await loadVatarChallenges();
             } catch (err) {
                 vatarError(err);
+                // The Lagos Life match was created before the lobby listing failed. Cancel it so no
+                // invisible "open" match is left behind (it would still say "waiting for an opponent").
+                try { await V.match.leave(); activeVatarMatch = null; setStatus('Challenge could not be published. Please try again.'); }
+                catch (leaveErr) { console.warn('[Vatar] could not cancel unpublished match:', leaveErr?.code || leaveErr); }
                 showToast('Could not publish the challenge. Please try again.', 3000);
             } finally {
                 if (createButton) { createButton.disabled = false; createButton.textContent = '＋ Publish Challenge'; }
