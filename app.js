@@ -6611,29 +6611,17 @@
             document.querySelector('.user-btn')?.addEventListener('click', () => document.querySelector('[data-page="profile"]')?.click());
             document.getElementById('side-menu-user-section')?.addEventListener('click', () => { document.querySelector('[data-page="profile"]')?.click(); document.getElementById('side-menu')?.classList.remove('active'); document.getElementById('side-menu-overlay')?.classList.remove('active'); });
             // In-app/browser Back support: return to the previous app page when possible.
-            const appBackStack = [];
-            document.addEventListener('click', (event) => {
-                const nav = event.target.closest('[data-page]');
-                if (nav && nav.dataset.page) { appBackStack.push(nav.dataset.page); if (appBackStack.length > 30) appBackStack.shift(); }
-            }, true);
-            if (!window.__sudokuLifeBackBound) {
-                window.__sudokuLifeBackBound = true;
-                history.replaceState({ sudokuLife: true }, '', location.href);
-                history.pushState({ sudokuLife: true, page: 'lobby' }, '', location.href);
-                window.addEventListener('popstate', () => {
-                    const modal = document.querySelector('.modal.active, .daily-newspaper-modal:not([hidden])');
-                    if (modal) { modal.classList.remove('active'); modal.hidden = true; history.pushState({ sudokuLife: true }, '', location.href); return; }
-                    const game = document.getElementById('game-screen');
-                    if (game && game.classList.contains('active')) { document.getElementById('back-to-lobby-btn')?.click(); }
-                    else { document.querySelector('[data-page="lobby"]')?.click(); }
-                    history.pushState({ sudokuLife: true }, '', location.href);
-                });
-            }
+            // Page history is managed by the shared navigation handler below.
             // Daily Challenge newspaper reader. News is loaded from the app's optional server endpoint;
             // never invent a headline when a verified source cannot be reached.
-            const dailyPaper = document.getElementById('daily-newspaper-modal');
+            let dailyPaper = document.getElementById('daily-newspaper-modal');
+            if (!dailyPaper) {
+                dailyPaper = document.createElement('section');
+                dailyPaper.id = 'daily-newspaper-modal'; dailyPaper.hidden = true; dailyPaper.setAttribute('role','dialog'); dailyPaper.setAttribute('aria-modal','true'); dailyPaper.setAttribute('aria-labelledby','daily-paper-headline');
+                dailyPaper.innerHTML = `<article class="daily-paper-sheet"><div class="daily-paper-masthead">SUDOKU LIFE GAZETTE</div><div class="daily-paper-kicker" id="daily-paper-date"></div><h2>IN CASE YOU MISSED YESTERDAY'S NEWS</h2><h2 id="daily-paper-headline">Loading yesterday's headline…</h2><p id="daily-paper-summary">A look back at a major story from the previous day.</p><p id="daily-paper-source"></p><div class="daily-paper-actions"><button type="button" id="daily-paper-play">TURN PAGE · PLAY TODAY'S SUDOKU →</button><button type="button" class="secondary" id="daily-paper-close">Close newspaper</button></div></article>`;
+                document.body.appendChild(dailyPaper);
+            }
             const openDailyPaper = async () => {
-                if (!dailyPaper) { window.launchDailyChallenge?.(); return; }
                 const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
                 document.getElementById('daily-paper-date').textContent = yesterday.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'}).toUpperCase();
                 document.getElementById('daily-paper-headline').textContent = 'Yesterday’s verified headline is not available right now.';
@@ -7484,10 +7472,16 @@
             return document.getElementById('side-menu')?.classList.contains('active');
         }
 
+        const sudokuLifePageStack = [];
         function getCurrentPage() {
             const active = document.querySelector('.side-menu-item.active');
             return active?.dataset?.page || 'lobby';
         }
+        document.querySelectorAll('.side-menu-item').forEach(item => item.addEventListener('click', () => {
+            const current = getCurrentPage();
+            if (item.dataset.page && item.dataset.page !== current) sudokuLifePageStack.push(current);
+            if (sudokuLifePageStack.length > 40) sudokuLifePageStack.shift();
+        }, true));
 
         // Push a state so every navigation creates a history entry
         function pushNavState(name) {
@@ -7540,11 +7534,14 @@
                 return;
             }
 
-            // 5. Non-lobby page → go back to lobby
+            // 5. Return to the actual previous app page, not always the lobby.
             const page = getCurrentPage();
             if (page && page !== 'lobby') {
-                document.querySelector('[data-page="lobby"]')?.click();
+                let previous = sudokuLifePageStack.pop();
+                if (!previous || previous === page) previous = 'lobby';
+                document.querySelector(`[data-page="${previous}"]`)?.click();
                 vibrate(30);
+                history.pushState({ nav: previous }, '');
                 return;
             }
 

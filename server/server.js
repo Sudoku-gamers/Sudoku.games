@@ -106,24 +106,43 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (url.pathname === '/api/daily-news' && req.method === 'GET') {
-      // Fetch a previous-day news result through the server to avoid browser CORS.
-      // Return only a publisher-linked headline; if the feed is unavailable, the client shows a clear fallback.
-      try {
-        const yesterday = new Date(Date.now() - 86400000);
-        const day = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
-        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent('Nigeria when:' + day)}&hl=en-NG&gl=NG&ceid=NG:en`;
-        const feedResponse = await fetch(rssUrl, { headers: { 'User-Agent': 'SudokuLife/1.0 news-reader' }, signal: AbortSignal.timeout(4500) });
-        if (!feedResponse.ok) return send(res, 502, { error: 'news_feed_unavailable' });
-        const xml = await feedResponse.text();
-        const item = xml.match(/<item>([\s\S]*?)<\/item>/i)?.[1];
-        if (!item) return send(res, 404, { error: 'no_headline_for_previous_day' });
-        const decode = (value) => value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
-        const field = (name) => decode(item.match(new RegExp(`<${name}>([\s\S]*?)<\/${name}>`, 'i'))?.[1] || '');
-        const title = field('title'); const articleUrl = field('link'); const description = field('description');
-        const source = decode(item.match(/<source[^>]*>([\s\S]*?)<\/source>/i)?.[1] || 'Google News publisher feed');
-        if (!title || !/^https?:\/\//i.test(articleUrl)) return send(res, 404, { error: 'no_verified_headline' });
-        return send(res, 200, { date: day, title, description: description.replace(/<[^>]+>/g, ' ').slice(0, 500), url: articleUrl, source });
-      } catch (_) { return send(res, 502, { error: 'news_feed_unavailable' }); }
+      // Try multiple public feeds, then select an item published on the previous
+      // local calendar day. RSS is not a guaranteed API, so fail clearly if all fail.
+      const now = new Date();
+      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const day = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+      const feeds = [
+        'https://news.google.com/rss/search?q=' + encodeURIComponent('Nigeria when:2d') + '&hl=en-NG&gl=NG&ceid=NG:en',
+        'https://rss.punchng.com/v1/punch/metro',
+        'https://rss.punchng.com/v1/punch/news'
+      ];
+      const decode = (value) => String(value || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
+      for (const rssUrl of feeds) {
+        try {
+          const feedResponse = await fetch(rssUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SudokuLife/1.0)', 'Accept': 'application/rss+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(6500) });
+          if (!feedResponse.ok) continue;
+          const xml = await feedResponse.text();
+          const items = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map(m => m[1]);
+          const candidates = items.map(item => {
+            const field = (name) => decode(item.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i'))?.[1] || '');
+            const title = field('title');
+            const articleUrl = field('link') || decode(item.match(/<link\b[^>]*href=["']([^"']+)/i)?.[1] || '');
+            const published = field('pubDate') || field('published') || field('updated');
+            const parsedDate = published ? new Date(published) : null;
+            const source = decode(item.match(/<source[^>]*>([\s\S]*?)<\/source>/i)?.[1] || new URL(rssUrl).hostname.replace(/^www\./,''));
+            return { title, url: articleUrl, published, parsedDate, source, description: field('description').replace(/<[^>]+>/g,' ').slice(0,500) };
+          }).filter(x => x.title && /^https?:\/\//i.test(x.url) && x.parsedDate && !Number.isNaN(x.parsedDate.getTime()));
+          const matching = candidates.filter(x => {
+            const d = x.parsedDate;
+            return d.getFullYear() === yesterday.getFullYear() && d.getMonth() === yesterday.getMonth() && d.getDate() === yesterday.getDate();
+          }).sort((a,b) => b.parsedDate - a.parsedDate);
+          if (matching.length) {
+            const chosen = matching[0];
+            return send(res, 200, { date: day, title: chosen.title, description: chosen.description, url: chosen.url, source: chosen.source, publishedAt: chosen.parsedDate.toISOString() });
+          }
+        } catch (_) { /* try next feed */ }
+      }
+      return send(res, 502, { error: 'news_feed_unavailable', date: day, message: 'No trusted news feed returned a headline dated yesterday.' });
     }
     if (url.pathname === '/api/vatar/challenges' && req.method === 'GET') {
       const now = Date.now();
