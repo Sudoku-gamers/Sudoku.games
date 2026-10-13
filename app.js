@@ -1325,12 +1325,12 @@
             });
             
             // Sound toggle
-            document.getElementById('sound-toggle').addEventListener('click', function() {
+            document.getElementById('sound-toggle')?.addEventListener('click', function() {
                 this.classList.toggle('active');
                 playerData.settings.soundEnabled = this.classList.contains('active');
                 savePlayerData();
             });
-            document.getElementById('colorblind-toggle').addEventListener('click', function() {
+            document.getElementById('colorblind-toggle')?.addEventListener('click', function() {
                 this.classList.toggle('active');
                 playerData.settings.colorBlind = this.classList.contains('active');
                 savePlayerData();
@@ -1338,14 +1338,14 @@
             });
             
             // Animations toggle
-            document.getElementById('animations-toggle').addEventListener('click', function() {
+            document.getElementById('animations-toggle')?.addEventListener('click', function() {
                 this.classList.toggle('active');
                 playerData.settings.animationsEnabled = this.classList.contains('active');
                 savePlayerData();
             });
             
             // Clear history
-            document.getElementById('clear-history-btn').addEventListener('click', () => {
+            document.getElementById('clear-history-btn')?.addEventListener('click', () => {
                 if (confirm('Are you sure you want to clear all game history? This cannot be undone.')) {
                     playerData.history = [];
                     savePlayerData();
@@ -1355,7 +1355,7 @@
             });
             
             // Reset rating
-            document.getElementById('reset-rating-btn').addEventListener('click', () => {
+            document.getElementById('reset-rating-btn')?.addEventListener('click', () => {
                 if (confirm('Are you sure you want to reset your rating to 2.0? This cannot be undone.')) {
                     playerRating = CONFIG.STARTING_RATING;
                     playerData.profile = {
@@ -1388,7 +1388,7 @@
 
         function setupPermanentNumberPad() {
             // Mode toggle buttons
-            document.getElementById('pen-mode-btn').addEventListener('click', function() {
+            document.getElementById('pen-mode-btn')?.addEventListener('click', function() {
                 if (gameState.gameMode === 'passplay' && gameState.currentPlayer !== 1) return;
                 gameState.inputMode = 'pen';
                 document.getElementById('pen-mode-btn').classList.add('active');
@@ -1397,7 +1397,7 @@
                 updateNumberPadVisuals();
             });
 
-            document.getElementById('pencil-mode-btn').addEventListener('click', function() {
+            document.getElementById('pencil-mode-btn')?.addEventListener('click', function() {
                 gameState.inputMode = 'pencil';
                 document.getElementById('pen-mode-btn').classList.remove('active');
                 document.getElementById('pencil-mode-btn').classList.add('pencil-active');
@@ -1405,13 +1405,13 @@
                 updateNumberPadVisuals();
             });
 
-            document.getElementById('erase-btn').addEventListener('click', function() {
+            document.getElementById('erase-btn')?.addEventListener('click', function() {
                 if (gameState.selectedCell) {
                     eraseCell(gameState.selectedCell.row, gameState.selectedCell.col);
                 }
             });
 
-            document.getElementById('hint-btn').addEventListener('click', function() {
+            document.getElementById('hint-btn')?.addEventListener('click', function() {
                 if (!gameState.isRunning) return;
                 const N = gameState.gridSize || 9;
                 const maxHints = { easy: 5, medium: 3, hard: 1, extreme: 0 }[gameState.difficulty] ?? 3;
@@ -1748,7 +1748,7 @@
             });
 
             // AI toggle - now opens difficulty modal
-            document.getElementById('ai-toggle-card').addEventListener('click', function() {
+            document.getElementById('ai-toggle-card')?.addEventListener('click', function() {
                 if (!gameState.vsAI) {
                     // Show AI difficulty selection modal
                     document.getElementById('ai-difficulty-modal').classList.add('active');
@@ -1783,19 +1783,19 @@
                 });
             });
 
-            document.getElementById('ai-difficulty-close').addEventListener('click', () => {
+            document.getElementById('ai-difficulty-close')?.addEventListener('click', () => {
                 document.getElementById('ai-difficulty-modal').classList.remove('active');
             });
 
             // Start game
-            document.getElementById('start-game-btn').addEventListener('click', () => {
+            document.getElementById('start-game-btn')?.addEventListener('click', () => {
                 if (gameState.gameMode === 'solveoff') {
                     showToast('Competitive Solve-Off is an online match. Use Lagos Life Quick Match, Create Match, or Join Code.', 3200);
                     return;
                 }
                 startGame();
             });
-            document.getElementById('solo-sudoku-btn').addEventListener('click', () => {
+            document.getElementById('solo-sudoku-btn')?.addEventListener('click', () => {
                 gameState.storyModeActive = false; gameState.storyLevel = null;
                 document.getElementById('difficulty-modal').classList.add('active');
             });
@@ -1864,22 +1864,22 @@
                 });
             });
 
-            document.getElementById('difficulty-close').addEventListener('click', () => {
+            document.getElementById('difficulty-close')?.addEventListener('click', () => {
                 document.getElementById('difficulty-modal').classList.remove('active');
                 document.querySelector('.tab[data-tab="quick"]').click();
             });
 
             // Game controls
-            document.getElementById('resign-btn').addEventListener('click', resignGame);
-            document.getElementById('new-game-btn').addEventListener('click', resetGame);
-            document.getElementById('game-menu-btn').addEventListener('click', exitToLobby);
+            document.getElementById('resign-btn')?.addEventListener('click', resignGame);
+            document.getElementById('new-game-btn')?.addEventListener('click', resetGame);
+            document.getElementById('game-menu-btn')?.addEventListener('click', exitToLobby);
 
             // Result modal
-            document.getElementById('play-again-btn').addEventListener('click', () => {
+            document.getElementById('play-again-btn')?.addEventListener('click', () => {
                 document.getElementById('result-modal').classList.remove('active');
                 resetGame();
             });
-            document.getElementById('back-to-lobby-btn').addEventListener('click', () => {
+            document.getElementById('back-to-lobby-btn')?.addEventListener('click', () => {
                 document.getElementById('result-modal').classList.remove('active');
                 exitToLobby();
             });
@@ -1891,7 +1891,7 @@
                     hideNumberPicker();
                 });
             });
-            document.getElementById('picker-close').addEventListener('click', hideNumberPicker);
+            document.getElementById('picker-close')?.addEventListener('click', hideNumberPicker);
 
             // Permanent number pad
             setupPermanentNumberPad();
@@ -4152,7 +4152,7 @@
                 document.getElementById('side-menu-overlay').classList.add('active');
             });
 
-            document.getElementById('create-tournament-btn').addEventListener('click', () => {
+            document.getElementById('create-tournament-btn')?.addEventListener('click', () => {
                 if (!currentUser) {
                     showToast('Sign in to create a tournament', 2500);
                     setTimeout(() => document.getElementById('side-auth-btn')?.click(), 600);
@@ -4166,21 +4166,21 @@
                 document.getElementById('create-tournament-modal').classList.add('active');
             });
 
-            document.getElementById('create-tournament-cancel').addEventListener('click', () =>
+            document.getElementById('create-tournament-cancel')?.addEventListener('click', () =>
                 document.getElementById('create-tournament-modal').classList.remove('active'));
 
-            document.getElementById('create-tournament-submit').addEventListener('click', createTournament);
+            document.getElementById('create-tournament-submit')?.addEventListener('click', createTournament);
 
-            document.getElementById('td-close-btn').addEventListener('click', () => {
+            document.getElementById('td-close-btn')?.addEventListener('click', () => {
                 document.getElementById('tournament-detail-modal').classList.remove('active');
                 clearInterval(_tournamentDetailInterval);
                 _tournamentDetailInterval = null;
             });
 
-            document.getElementById('td-join-btn').addEventListener('click', joinCurrentTournament);
-            document.getElementById('td-launch-btn').addEventListener('click', launchTournament);
-            document.getElementById('td-leave-btn').addEventListener('click', leaveCurrentTournament);
-            document.getElementById('td-delete-btn').addEventListener('click', deleteCurrentTournament);
+            document.getElementById('td-join-btn')?.addEventListener('click', joinCurrentTournament);
+            document.getElementById('td-launch-btn')?.addEventListener('click', launchTournament);
+            document.getElementById('td-leave-btn')?.addEventListener('click', leaveCurrentTournament);
+            document.getElementById('td-delete-btn')?.addEventListener('click', deleteCurrentTournament);
 
             // Leaderboard TC tabs
             document.querySelectorAll('.friends-tab[data-lb]').forEach(tab => {
@@ -5427,17 +5427,17 @@
         }
 
         function setupOnlineListeners() {
-            document.getElementById('sb-connect-btn').addEventListener('click', connectSupabase);
-            document.getElementById('create-room-btn').addEventListener('click', createOnlineRoom);
-            document.getElementById('find-opponent-btn').addEventListener('click', findOpponent);
+            document.getElementById('sb-connect-btn')?.addEventListener('click', connectSupabase);
+            document.getElementById('create-room-btn')?.addEventListener('click', createOnlineRoom);
+            document.getElementById('find-opponent-btn')?.addEventListener('click', findOpponent);
 
-            document.getElementById('join-room-btn').addEventListener('click', () => {
+            document.getElementById('join-room-btn')?.addEventListener('click', () => {
                 document.getElementById('join-code-input').value = '';
                 document.getElementById('join-error').textContent = '';
                 document.getElementById('join-room-modal').classList.add('active');
             });
 
-            document.getElementById('join-confirm-btn').addEventListener('click', () => {
+            document.getElementById('join-confirm-btn')?.addEventListener('click', () => {
                 const code = document.getElementById('join-code-input').value;
                 if (code.length < 6) {
                     document.getElementById('join-error').textContent = 'Please enter the full 6-character code.';
@@ -5446,10 +5446,10 @@
                 joinOnlineRoom(code);
             });
 
-            document.getElementById('join-cancel-btn').addEventListener('click', () =>
+            document.getElementById('join-cancel-btn')?.addEventListener('click', () =>
                 document.getElementById('join-room-modal').classList.remove('active'));
 
-            document.getElementById('cancel-waiting-btn').addEventListener('click', () => {
+            document.getElementById('cancel-waiting-btn')?.addEventListener('click', () => {
                 hideWaitingOverlay();
                 leaveMatchmakingQueue();
                 if (supabaseClient && onlineState.subscription)
@@ -5459,7 +5459,7 @@
                 onlineState.roomId = null;
             });
 
-            document.getElementById('share-copy-btn').addEventListener('click', () => {
+            document.getElementById('share-copy-btn')?.addEventListener('click', () => {
                 const link = document.getElementById('share-link-input').value;
                 navigator.clipboard.writeText(link).then(() => {
                     const btn = document.getElementById('share-copy-btn');
@@ -5470,10 +5470,10 @@
                 vibrate(40);
             });
 
-            document.getElementById('share-result-btn').addEventListener('click', shareResult);
+            document.getElementById('share-result-btn')?.addEventListener('click', shareResult);
 
             // Keyboard confirm on join input
-            document.getElementById('join-code-input').addEventListener('keydown', e => {
+            document.getElementById('join-code-input')?.addEventListener('keydown', e => {
                 if (e.key === 'Enter') document.getElementById('join-confirm-btn').click();
             });
 
@@ -5660,7 +5660,7 @@
         }
 
         function setupAuthListeners() {
-            document.getElementById('side-auth-btn').addEventListener('click', () => {
+            document.getElementById('side-auth-btn')?.addEventListener('click', () => {
                 if (currentUser) {
                     // Already signed in — go to profile
                     document.querySelector('[data-page="profile"]').click();
@@ -5671,13 +5671,13 @@
                 document.getElementById('side-menu-overlay').classList.remove('active');
             });
 
-            document.getElementById('side-signout-btn').addEventListener('click', async () => {
+            document.getElementById('side-signout-btn')?.addEventListener('click', async () => {
                 await supabaseClient.auth.signOut();
                 document.getElementById('side-menu').classList.remove('active');
                 document.getElementById('side-menu-overlay').classList.remove('active');
             });
 
-            document.getElementById('auth-toggle-btn').addEventListener('click', () => {
+            document.getElementById('auth-toggle-btn')?.addEventListener('click', () => {
                 authMode = authMode === 'signin' ? 'signup' : 'signin';
                 const isSignup = authMode === 'signup';
                 document.getElementById('auth-title').textContent = isSignup ? 'Create Account' : 'Welcome back';
@@ -5689,8 +5689,8 @@
                 document.getElementById('auth-error').textContent = '';
             });
 
-            document.getElementById('auth-submit-btn').addEventListener('click', handleAuthSubmit);
-            document.getElementById('auth-skip-btn').addEventListener('click', () => {
+            document.getElementById('auth-submit-btn')?.addEventListener('click', handleAuthSubmit);
+            document.getElementById('auth-skip-btn')?.addEventListener('click', () => {
                 localStorage.setItem('sudoku_auth_skipped', '1');
                 document.getElementById('auth-modal').classList.remove('active');
             });
@@ -6167,8 +6167,8 @@
         }
 
         function setupFriendsListeners() {
-            document.getElementById('friend-search-btn').addEventListener('click', searchFriend);
-            document.getElementById('friend-search-input').addEventListener('keydown', e => {
+            document.getElementById('friend-search-btn')?.addEventListener('click', searchFriend);
+            document.getElementById('friend-search-input')?.addEventListener('keydown', e => {
                 if (e.key === 'Enter') searchFriend();
             });
             const friendsMenuBtn = document.getElementById('friends-menu-btn');
@@ -6473,6 +6473,8 @@
         };
 
         function init() {
+            // Failsafe: never leave the user stuck on the splash if a later step throws.
+            setTimeout(() => { try { hideSplash(); } catch (_) {} }, 4000);
             loadPlayerData();
             setupEventListeners();
             setupOnlineListeners();
@@ -6491,12 +6493,12 @@
 
             // Ongoing game icon
             checkAndShowOngoingBanner();
-            document.getElementById('ongoing-game-btn').addEventListener('click', resumeGame);
+            document.getElementById('ongoing-game-btn')?.addEventListener('click', resumeGame);
 
             if (!localStorage.getItem('sudoku_seen_howto')) {
                 document.getElementById('how-to-play-modal').classList.add('active');
             }
-            document.getElementById('how-to-play-close').addEventListener('click', () => {
+            document.getElementById('how-to-play-close')?.addEventListener('click', () => {
                 document.getElementById('how-to-play-modal').classList.remove('active');
                 localStorage.setItem('sudoku_seen_howto', '1');
             });
@@ -6546,7 +6548,28 @@
     // ============================================================
     (async function initVatar() {
         const V = window.Vatar;
-        if (!V || typeof V.init !== 'function') return; // standalone/PWA mode
+        // Show a real, visible reason instead of "Connecting..." forever (phones have no console).
+        const showLagosStatus = (message, withRetry) => {
+            const statusBox = document.getElementById('vatar-player-status');
+            if (statusBox) {
+                statusBox.textContent = message;
+                if (withRetry) {
+                    const retry = document.createElement('button');
+                    retry.className = 'action-btn btn-secondary';
+                    retry.style.cssText = 'margin-left:8px;padding:4px 10px;font-size:.75rem;';
+                    retry.textContent = 'Retry';
+                    retry.addEventListener('click', () => location.reload());
+                    statusBox.append(' ', retry);
+                }
+            }
+            const listBox = document.getElementById('vatar-challenge-list');
+            if (listBox) listBox.textContent = 'Open challenges need a Lagos Life connection.';
+        };
+        if (!V || typeof V.init !== 'function') {
+            console.warn('[Vatar] SDK script not loaded');
+            showLagosStatus('Lagos Life SDK did not load. Check your connection.', true);
+            return;
+        }
 
         let vatarPlayer = null;
         let activeVatarMatch = null;
@@ -6567,13 +6590,18 @@
             showToast('Lagos Life: ' + String(code).replaceAll('_', ' '), 3000);
         };
 
+        let result = null;
         try {
-            const result = await V.init();
+            result = await V.init();
             vatarPlayer = result.player;
             if (!vatarPlayer?.id) throw new Error('missing_player');
             console.log('[Vatar] SDK v1 ready:', vatarPlayer.name, result.mode);
         } catch (err) {
             console.warn('[Vatar] SDK init unavailable; keeping standalone mode.', err);
+            const initCode = err?.code || err?.message || 'unknown';
+            showLagosStatus(initCode === 'not_framed'
+                ? 'Not connected: open this game from the Lagos Life Games app to play online. (not_framed)'
+                : 'Could not connect to Lagos Life (' + initCode + ').', true);
             return;
         }
 
@@ -7077,7 +7105,7 @@
         }
     });
 
-    document.getElementById('pwa-install-btn').addEventListener('click', async () => {
+    document.getElementById('pwa-install-btn')?.addEventListener('click', async () => {
         if (!deferredInstallPrompt) return;
         deferredInstallPrompt.prompt();
         const { outcome } = await deferredInstallPrompt.userChoice;
@@ -7090,7 +7118,7 @@
         }
     });
 
-    document.getElementById('pwa-dismiss-btn').addEventListener('click', () => {
+    document.getElementById('pwa-dismiss-btn')?.addEventListener('click', () => {
         document.getElementById('pwa-install-banner').style.display = 'none';
         localStorage.setItem('pwa_install_dismissed', '1');
     });
