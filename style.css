@@ -3613,3 +3613,41 @@ select.setting-input option { background: var(--bg) !important; color: var(--tex
 @keyframes storyPageAppear { from { opacity:.35; transform:translateX(12px); } to { opacity:1; transform:translateX(0); } }
 @keyframes storyPageTurn { 0% { transform:perspective(900px) rotateY(0); } 45% { transform:perspective(900px) rotateY(-7deg); filter:brightness(.82); } 100% { transform:perspective(900px) rotateY(0); filter:brightness(1); } }
 @media(max-width:520px) { #story-edition-modal { padding:10px 6px; } .story-edition-shell { width:98vw; padding-top:43px; } .story-edition-close { top:0; right:4px; } .story-edition-paper { padding:12px 14px 0; } .story-edition-page { min-height:260px; } .story-edition-columns { grid-template-columns:1fr; gap:6px; } .story-edition-sidebox { display:grid; grid-template-columns:1fr 1fr; } .story-edition-sidebox strong { grid-column:1/-1; } .story-edition-controls { align-items:stretch; flex-direction:column; } .story-edition-controls button { width:100%; } }
+
+/* ============================================
+   VINTAGE NEWSPAPER APP-WIDE THEME
+   Warm ink, aged paper, and muted archive tones.
+   ============================================ */
+:root {
+  --bg-primary: #e8ddc5;
+  --bg-secondary: #d8c9aa;
+  --bg-tertiary: #c9b895;
+  --bg-hover: #c0ad88;
+  --bg-card: #e3d6bb;
+  --text-primary: #453b2c;
+  --text-bright: #211b14;
+  --text-muted: #786951;
+  --accent-orange: #98632d;
+  --accent-green: #65734b;
+  --accent-red: #9b4539;
+  --accent-blue: #536e78;
+  --board-light: #f3e8d0;
+  --board-dark: #c9b18a;
+  --board-highlight: rgba(142, 126, 74, .42);
+  --p1-color: #596f78;
+  --p2-color: #a66b45;
+  --border-color: #b7a583;
+}
+html, body { background-color: #e8ddc5; color: #453b2c; }
+body { background-image: repeating-linear-gradient(0deg, rgba(92,69,36,.018) 0, rgba(92,69,36,.018) 1px, transparent 1px, transparent 4px); }
+button, input, select, textarea { font-family: Georgia, 'Times New Roman', serif; }
+button { border-color: #b7a583; }
+/* Keep the article as one readable newspaper page; only the front and puzzle are separate turns. */
+.story-edition-article { min-height: 0; }
+.story-edition-article .story-edition-columns { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
+.story-edition-article .story-edition-columns p { font-size: 1rem; line-height: 1.7; }
+.story-edition-article .story-edition-archive-note { margin-top: 12px; }
+@media (min-width: 700px) {
+  .story-edition-article .story-edition-columns { column-count: 2; column-gap: 28px; display: block; }
+  .story-edition-article .story-edition-columns p { break-inside: avoid; }
+}
