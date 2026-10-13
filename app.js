@@ -7035,8 +7035,15 @@
 
                 // Page reload after SW takes control
                 let refreshing = false;
+                // Initial installation can also fire controllerchange. Do not reload
+                // on first control; that can look like an endless startup spinner on
+                // some hosts. Reload only when an existing controller is replaced.
+                const hadControllerAtRegistration = !!navigator.serviceWorker.controller;
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    if (!refreshing) { refreshing = true; location.reload(); }
+                    if (hadControllerAtRegistration && !refreshing) {
+                        refreshing = true;
+                        location.reload();
+                    }
                 });
 
             } catch (e) {

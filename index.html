@@ -26,23 +26,7 @@
     <meta property="og:description" content="Race a friend or AI to solve a Sudoku. Claim cells, score points, win.">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary">
-
-    <!-- SW cleanup: unregister any old workers with wrong scope, then re-register -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(regs => {
-          regs.forEach(reg => {
-            // Remove any SW not scoped to our exact path
-            if (!reg.scope.endsWith('/Sudoku.games/')) {
-              reg.unregister();
-              console.log('[SW] Unregistered stale SW:', reg.scope);
-            }
-          });
-        });
-      }
-    </script>
-
-    <!-- Styles (cached separately by SW) -->
+<!-- Styles (cached separately by SW) -->
     <link rel="stylesheet" href="style.css">
 
     <!-- Supabase (CDN, cached by SW after first load) -->
@@ -96,6 +80,19 @@
         <div class="splash-title">Sudoku.game</div>
         <div class="splash-sub">Competitive PvP Sudoku</div>
     </div>
+    <script>
+      // Fail-safe: never leave the animated splash covering the app forever
+      // if a later script fails or an optional service is unavailable.
+      window.setTimeout(function () {
+        var splash = document.getElementById('splash-screen');
+        if (splash) {
+          splash.classList.add('hidden');
+          window.setTimeout(function () {
+            if (splash.parentNode) splash.parentNode.removeChild(splash);
+          }, 550);
+        }
+      }, 8000);
+    </script>
 <!-- ============================================
          SIDE MENU
          ============================================ -->
