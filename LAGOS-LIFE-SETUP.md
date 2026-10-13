@@ -38,3 +38,8 @@ The SDK's native match API provides matchmaking and match lifecycle, not arbitra
 Endless Story Mode is a solo progression map with locally saved unlocks and stars; Solo Sudoku, Daily Challenge, and Technique Dojo remain available.
 
 The purchase endpoint verifies the signed Vatar session, fetches the purchase from Vatar, checks ownership/status/product allowlist, and marks it delivered. The included JSON store is intended for a single Node instance with persistent disk; use a transactional database/unique purchase ID constraint before horizontal scaling.
+
+
+## Challenge setup in this build
+
+The Lagos Life match panel lets players choose Cell Capture or Competitive Solve-Off and a 1–20 minute clock, create a zero-stake challenge, and share the six-character invite code. An opponent joins using that code. The stake control is intentionally locked to friendly/no-stake matches. Do not enable stakes until the reviewed build has authoritative server-side puzzle/move validation and signed result settlement, and Lagos Life has approved staked play. The selected mode/clock are shared through the existing `/api/vatar/solveoff/config` endpoint when the match starts; confirm that endpoint is deployed and configured on the production server.

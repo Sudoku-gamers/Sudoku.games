@@ -6592,6 +6592,10 @@
         savePlayerData();
 
         if (panel) panel.style.display = 'flex';
+        const challengeMode = document.getElementById('vatar-challenge-mode');
+        const challengeTime = document.getElementById('vatar-challenge-time');
+        if (challengeMode) challengeMode.value = gameState.gameMode === 'solveoff' ? 'solveoff' : 'simultaneous';
+        if (challengeTime) challengeTime.value = String(Math.max(60, Math.min(1200, Number(gameState.timeLimit) || 600)));
         setStatus('Signed in as ' + displayName + ' · ' + (result.mode === 'test' ? 'Sandbox' : 'Lagos Life'));
         const usernameEl = document.getElementById('menu-username');
         const avatarEl = document.getElementById('menu-avatar');
@@ -6634,13 +6638,9 @@
         const updateMatch = async (match) => {
             if (!match) return;
             activeVatarMatch = match;
-            if (match.code) {
-                const codeInput = document.getElementById('vatar-join-code');
-                if (codeInput) codeInput.value = match.code;
-            }
             const players = Array.isArray(match.players) ? match.players : [];
             if (match.status === 'open') {
-                setStatus('Match room ' + (match.code || '') + ' · waiting for opponent');
+                setStatus('Challenge is open · waiting for an opponent');
                 const waitTitle = document.getElementById('waiting-title');
                 if (waitTitle) waitTitle.textContent = 'Waiting for Lagos Life opponent…';
             } else if (match.status === 'playing') {
@@ -6680,7 +6680,7 @@
                 }
                 // Ensure both clients use a deterministic puzzle for this match id.
                 // This synchronizes generation only; the server still does not verify solutions.
-                const seedText = String(match.id || match.code || 'sudoku-vatar');
+                const seedText = String(match.id || 'sudoku-vatar');
                 let seed = 2166136261;
                 for (let i = 0; i < seedText.length; i++) seed = Math.imul(seed ^ seedText.charCodeAt(i), 16777619) >>> 0;
                 const originalRandom = Math.random;
@@ -6813,32 +6813,118 @@
             return vatarEndGameBase(winner, reason);
         };
 
+        const readChallengeSettings = () => {
+            const mode = document.getElementById('vatar-challenge-mode')?.value === 'solveoff' ? 'solveoff' : 'simultaneous';
+            const timeLimit = Math.max(60, Math.min(1200, Number(document.getElementById('vatar-challenge-time')?.value) || 600));
+            // Never trust a browser-selected stake. This release deliberately creates zero-stake matches only.
+            gameState.gameMode = mode;
+            gameState.timeLimit = timeLimit;
+            document.querySelectorAll('.mode-card[data-mode]').forEach(card => card.classList.toggle('active', card.dataset.mode === mode));
+            document.querySelectorAll('.time-card').forEach(card => card.classList.toggle('active', card.dataset.time !== 'custom' && Number(card.dataset.time) === timeLimit));
+            return { mode, timeLimit };
+        };
+        const challengeList = document.getElementById('vatar-challenge-list');
+        const loadVatarChallenges = async () => {
+            if (!challengeList) return;
+            challengeList.innerHTML = '<div style="font-size:.8rem;color:var(--text-muted);">Checking for open challenges…</div>';
+            try {
+                const response = await fetch('/api/vatar/challenges', { cache: 'no-store' });
+                if (!response.ok) throw new Error('challenge_list_unavailable');
+                const data = await response.json();
+                const challenges = Array.isArray(data.challenges) ? data.challenges : [];
+                if (!challenges.length) {
+                    challengeList.innerHTML = '<div style="padding:12px;border:1px dashed var(--border-color, #777);border-radius:10px;font-size:.82rem;color:var(--text-muted);">No open challenges right now. Publish one or refresh in a moment.</div>';
+                    return;
+                }
+                challengeList.replaceChildren();
+                challenges.forEach(challenge => {
+                    const card = document.createElement('div');
+                    card.style.cssText = 'padding:12px;border:1px solid var(--border-color, #777);border-radius:10px;display:flex;flex-direction:column;gap:8px;';
+                    const heading = document.createElement('strong');
+                    heading.textContent = challenge.mode === 'solveoff' ? 'Competitive Solve-Off' : 'Cell Capture';
+                    const details = document.createElement('div');
+                    details.style.cssText = 'font-size:.8rem;color:var(--text-muted);';
+                    details.textContent = `${Math.round((Number(challenge.timeLimit) || 600) / 60)} minutes · Friendly match · No stake`;
+                    const join = document.createElement('button');
+                    join.className = 'action-btn btn-primary';
+                    join.textContent = 'Review terms & Join';
+                    join.addEventListener('click', async () => {
+                        const terms = `Join this Sudoku challenge?\n\nMode: ${heading.textContent}\nTime limit: ${details.textContent.split(' · ')[0]}\nStake: No stake (friendly match)\n\nBy joining, you agree to these match terms.`;
+                        if (!window.confirm(terms)) return;
+                        join.disabled = true; join.textContent = 'Joining…';
+                        try {
+                            const { session } = await V.session();
+                            const response = await fetch(`/api/vatar/challenges/${encodeURIComponent(challenge.id)}/join`, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ session })
+                            });
+                            const result = await response.json().catch(() => ({}));
+                            if (!response.ok || !result.code) throw new Error(result.error || 'challenge_unavailable');
+                            // The private room code is only passed internally to the SDK; it is never rendered or announced.
+                            const match = await V.match.join(result.code);
+                            gameState.gameMode = result.config?.mode === 'solveoff' ? 'solveoff' : 'simultaneous';
+                            gameState.timeLimit = Math.max(60, Math.min(1200, Number(result.config?.timeLimit) || 600));
+                            updateMatch(match);
+                            loadVatarChallenges();
+                        } catch (err) {
+                            join.disabled = false; join.textContent = 'Review terms & Join';
+                            showToast('Could not join that challenge. It may have filled or expired. Refresh the list and try again.', 3500);
+                            console.warn('[Vatar] challenge join failed:', err);
+                            loadVatarChallenges();
+                        }
+                    });
+                    card.append(heading, details, join);
+                    challengeList.append(card);
+                });
+            } catch (err) {
+                challengeList.innerHTML = '<div style="font-size:.8rem;color:var(--text-muted);">Challenge list is unavailable. Please try Refresh.</div>';
+                console.warn('[Vatar] challenge list failed:', err);
+            }
+        };
         const createVatarMatch = async () => {
+            const settings = readChallengeSettings();
+            const modeLabel = settings.mode === 'solveoff' ? 'Competitive Solve-Off' : 'Cell Capture';
+            const agreed = window.confirm(`Publish this challenge for other players?\n\nMode: ${modeLabel}\nTime limit: ${settings.timeLimit / 60} minutes\nStake: No stake (friendly match)\n\nOther players will see these terms and must agree before joining.`);
+            if (!agreed) return;
+            const createButton = document.getElementById('vatar-create-match');
+            if (createButton) { createButton.disabled = true; createButton.textContent = 'Publishing…'; }
             try {
                 const match = await V.match.create({ stake: 0, seats: 2 });
+                if (!match?.id || !match?.code) throw new Error('match_creation_incomplete');
+                const { session } = await V.session();
+                const response = await fetch('/api/vatar/challenges', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session, matchId: match.id, code: match.code, config: settings })
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(result.error || 'challenge_publish_failed');
                 updateMatch(match);
-                showToast(match.code ? 'Room created. Share code: ' + match.code : 'Lagos Life room created.', 3500);
-            } catch (err) { vatarError(err); }
+                setStatus('Challenge published · waiting for a player to join');
+                showToast('Challenge published. Players can review its terms and join from Open Challenges.', 3500);
+                await loadVatarChallenges();
+            } catch (err) {
+                vatarError(err);
+                showToast('Could not publish the challenge. Please try again.', 3000);
+            } finally {
+                if (createButton) { createButton.disabled = false; createButton.textContent = '＋ Publish Challenge'; }
+            }
         };
         const quickVatarMatch = async () => {
+            readChallengeSettings();
+            const agreed = window.confirm(`Find a friendly Sudoku match?\n\nMode: ${gameState.gameMode === 'solveoff' ? 'Competitive Solve-Off' : 'Cell Capture'}\nTime limit: ${gameState.timeLimit / 60} minutes\nStake: No stake\n\nBy continuing, you agree to these match terms.`);
+            if (!agreed) return;
             try {
                 setStatus('Finding an opponent…');
                 const match = await V.match.quick({ stake: 0 });
                 updateMatch(match);
             } catch (err) { setStatus('Could not find a match. Try again.'); vatarError(err); }
         };
-        const joinVatarMatch = async () => {
-            const input = document.getElementById('vatar-join-code');
-            const code = (input?.value || '').trim().toUpperCase();
-            if (!/^[A-Z0-9]{6}$/.test(code)) { showToast('Enter the six-letter match code.', 2200); return; }
-            try { updateMatch(await V.match.join(code)); }
-            catch (err) { vatarError(err); }
-        };
-
+        document.getElementById('vatar-challenge-mode')?.addEventListener('change', readChallengeSettings);
+        document.getElementById('vatar-challenge-time')?.addEventListener('change', readChallengeSettings);
         document.getElementById('vatar-create-match')?.addEventListener('click', createVatarMatch);
         document.getElementById('vatar-quick-match')?.addEventListener('click', quickVatarMatch);
-        document.getElementById('vatar-join-match')?.addEventListener('click', joinVatarMatch);
-        document.getElementById('vatar-join-code')?.addEventListener('keydown', e => { if (e.key === 'Enter') joinVatarMatch(); });
+        document.getElementById('vatar-refresh-challenges')?.addEventListener('click', loadVatarChallenges);
+        loadVatarChallenges();
 
         // In the Lagos Life frame, route the legacy online buttons to native Vatar matchmaking.
         // The old Supabase flow remains available when opened as a standalone web app.
@@ -6853,20 +6939,9 @@
         intercept('create-room-btn', createVatarMatch);
         intercept('find-opponent-btn', quickVatarMatch);
         intercept('join-room-btn', () => {
-            const modal = document.getElementById('join-room-modal');
-            if (modal) modal.classList.add('active');
-            const confirm = document.getElementById('join-confirm-btn');
-            if (confirm && !confirm.dataset.vatarBound) {
-                confirm.dataset.vatarBound = '1';
-                confirm.addEventListener('click', e => {
-                    e.preventDefault(); e.stopImmediatePropagation();
-                    const code = (document.getElementById('join-code-input')?.value || '').trim().toUpperCase();
-                    const vatarCode = document.getElementById('vatar-join-code');
-                    if (vatarCode) vatarCode.value = code;
-                    joinVatarMatch();
-                    modal?.classList.remove('active');
-                }, true);
-            }
+            document.getElementById('vatar-match-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            loadVatarChallenges();
+            showToast('Choose an open challenge, review its terms, then tap Join.', 3000);
         });
 
         // Purchases are only delivered after server-side verification. The server endpoint
