@@ -3541,3 +3541,23 @@ select.setting-input option { background: var(--bg) !important; color: var(--tex
     .num-pad-btn { height: clamp(52px, 4vw, 68px) !important; font-size: clamp(1.4rem, 2vw, 2rem) !important; }
     .tool-btn { width: 44px !important; height: 44px !important; }
 }
+
+/* Endless Story Mode */
+.story-map-card { width:min(680px,94vw); max-height:88vh; overflow:hidden; display:flex; flex-direction:column; padding:0; background:#111827; border:1px solid rgba(139,230,154,.24); }
+.story-map-header { padding:24px 24px 14px; background:radial-gradient(ellipse at top right,rgba(86,211,100,.15),transparent 65%); }
+.story-map-kicker { color:#8be69a; font-size:.68rem; font-weight:900; letter-spacing:.18em; }
+.story-map-header h2 { margin:6px 0; color:#f7fafc; font-size:1.5rem; }
+.story-map-header p { color:#aeb8c8; font-size:.84rem; margin:0 0 15px; line-height:1.45; }
+.story-progress-track { height:7px; border-radius:99px; background:#293244; overflow:hidden; }
+#story-progress-fill { width:2%; height:100%; border-radius:99px; background:linear-gradient(90deg,#56d364,#b6f58e); transition:width .25s ease; }
+.story-progress-label { margin-top:7px; color:#9ba8ba; font-size:.72rem; }
+.story-level-map { overflow:auto; padding:16px 20px 22px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.story-level { min-height:82px; border:1px solid #2d394c; border-radius:14px; background:#1a2433; color:#e7edf7; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; cursor:pointer; font:inherit; }
+.story-level strong { font-size:1.05rem; }
+.story-level span { font-size:.67rem; color:#aeb8c8; }
+.story-level .story-stars { color:#f5c95d; letter-spacing:1px; font-size:.7rem; }
+.story-level.unlocked { border-color:rgba(86,211,100,.55); background:linear-gradient(145deg,#20372d,#1a2433); }
+.story-level.current { outline:2px solid #8be69a; outline-offset:1px; }
+.story-level.locked { opacity:.45; cursor:not-allowed; }
+.story-map-footer { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:12px 20px; border-top:1px solid #293244; color:#aeb8c8; font-size:.7rem; }
+@media(max-width:420px) { .story-level-map { grid-template-columns:repeat(3,minmax(0,1fr)); padding:12px; gap:8px; } .story-level { min-height:72px; } .story-map-header { padding:20px 18px 12px; } }

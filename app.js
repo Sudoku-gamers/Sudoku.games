@@ -67,6 +67,12 @@
                     prefilled: '#cc6600',
                     name: 'Sunset'
                 },
+                gold: {
+                    light: '#fff0b3',
+                    dark: '#c99a22',
+                    prefilled: '#9a7417',
+                    name: 'Gold'
+                },
                 // ─── Modern clean themes ──────────────────────────
                 clean: {
                     light: '#ffffff',
@@ -1409,8 +1415,9 @@
                 if (!gameState.isRunning) return;
                 const N = gameState.gridSize || 9;
                 const maxHints = { easy: 5, medium: 3, hard: 1, extreme: 0 }[gameState.difficulty] ?? 3;
-                if (gameState.hintsUsed >= maxHints) {
-                    showToast(`No hints left (${maxHints} max on ${gameState.difficulty})`, 2200);
+                const usingBonusHint = gameState.hintsUsed >= maxHints;
+                if (usingBonusHint && (playerData.bonusHints || 0) <= 0) {
+                    showToast(`No hints left (${maxHints} included on ${gameState.difficulty})`, 2200);
                     return;
                 }
                 // Find a random empty cell and reveal its solution value
@@ -1420,6 +1427,7 @@
                         if (gameState.claims[r][c] === 0 && gameState.puzzle[r][c] === 0)
                             emptyCells.push([r, c]);
                 if (emptyCells.length === 0) return;
+                if (usingBonusHint) { playerData.bonusHints = Math.max(0, (playerData.bonusHints || 0) - 1); savePlayerData(); }
                 const [hr, hc] = emptyCells[Math.floor(Math.random() * emptyCells.length)];
                 const val = gameState.solution[hr][hc];
                 gameState.puzzle[hr][hc] = val;
@@ -1435,7 +1443,7 @@
                 markGridDirty();
                 drawGrid();
                 checkGameEnd();
-                showToast(`💡 Hint used (${gameState.hintsUsed}/${maxHints})`, 1800);
+                showToast(usingBonusHint ? `💡 Bonus hint used (${playerData.bonusHints || 0} left)` : `💡 Hint used (${gameState.hintsUsed}/${maxHints})`, 1800);
             });
 
             // Number pad buttons
@@ -1491,7 +1499,7 @@
         function updateHintDisplay() {
             const N = gameState.gridSize || 9;
             const maxHints = { easy: 5, medium: 3, hard: 1, extreme: 0 }[gameState.difficulty] ?? 3;
-            const remaining = Math.max(0, maxHints - (gameState.hintsUsed || 0));
+            const remaining = Math.max(0, maxHints - (gameState.hintsUsed || 0)) + Math.max(0, playerData.bonusHints || 0);
             const el = document.getElementById('hint-count');
             const btn = document.getElementById('hint-btn');
             if (el) el.textContent = remaining;
@@ -1574,6 +1582,91 @@
         }
 
         // ============================================
+        // ENDLESS STORY MODE — locally saved progression
+        // ============================================
+        const STORY_SAVE_KEY = 'sudoku_endless_story_v1';
+        let storyProgress = loadStoryProgress();
+        function loadStoryProgress() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(STORY_SAVE_KEY) || '{}');
+                return { unlocked: Math.max(1, Number(saved.unlocked) || 1), stars: saved.stars && typeof saved.stars === 'object' ? saved.stars : {}, totalStars: Number(saved.totalStars) || 0 };
+            } catch (_) { return { unlocked: 1, stars: {}, totalStars: 0 }; }
+        }
+        function saveStoryProgress() {
+            try { localStorage.setItem(STORY_SAVE_KEY, JSON.stringify(storyProgress)); } catch (_) {}
+            const summary = document.getElementById('story-progress-summary');
+            if (summary) summary.textContent = `Level ${storyProgress.unlocked} · ⭐ ${storyProgress.totalStars}`;
+        }
+        function storyDifficulty(level) {
+            if (level <= 5) return 'easy';
+            if (level <= 12) return 'medium';
+            if (level <= 22) return 'hard';
+            return 'extreme';
+        }
+        function renderStoryMap() {
+            storyProgress = loadStoryProgress();
+            saveStoryProgress();
+            const map = document.getElementById('story-level-map');
+            if (!map) return;
+            const levelCount = Math.max(40, storyProgress.unlocked + 12);
+            map.innerHTML = '';
+            for (let level = 1; level <= levelCount; level++) {
+                const unlocked = level <= storyProgress.unlocked;
+                const stars = Math.max(0, Math.min(3, Number(storyProgress.stars[level]) || 0));
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'story-level' + (unlocked ? ' unlocked' : ' locked') + (level === storyProgress.unlocked ? ' current' : '');
+                button.disabled = !unlocked;
+                button.innerHTML = `<strong>${unlocked ? level : '🔒'}</strong><span>${storyDifficulty(level).toUpperCase()}</span><span class="story-stars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</span>`;
+                button.setAttribute('aria-label', unlocked ? `Play level ${level}, ${storyDifficulty(level)}, ${stars} stars` : `Level ${level} locked`);
+                if (unlocked) button.addEventListener('click', () => startStoryLevel(level));
+                map.appendChild(button);
+            }
+            const fill = document.getElementById('story-progress-fill');
+            if (fill) fill.style.width = `${Math.min(100, (storyProgress.unlocked / levelCount) * 100)}%`;
+            const label = document.getElementById('story-progress-label');
+            if (label) label.textContent = `Level ${storyProgress.unlocked} unlocked · ${storyProgress.totalStars} stars earned`;
+        }
+        function openStoryMap() {
+            renderStoryMap();
+            document.getElementById('story-map-modal')?.classList.add('active');
+        }
+        function startStoryLevel(level) {
+            if (level > storyProgress.unlocked) return;
+            document.getElementById('story-map-modal')?.classList.remove('active');
+            gameState.storyLevel = level;
+            gameState.storyModeActive = true;
+            gameState.isDailyChallenge = false;
+            gameState.dojoTechniqueId = null;
+            gameState.gameMode = 'solo';
+            gameState.vsAI = false;
+            gameState.variant = 'classic';
+            gameState.difficulty = storyDifficulty(level);
+            document.querySelectorAll('.variant-pill').forEach(pill => pill.classList.toggle('active', pill.dataset.variant === 'classic'));
+            document.querySelectorAll('.mode-card[data-mode]').forEach(card => card.classList.remove('active'));
+            startGame();
+            const label = document.getElementById('game-mode-label');
+            if (label) label.textContent = `Story Mode · Level ${level}`;
+            showToast(`🗺️ Story Level ${level} · ${gameState.difficulty.toUpperCase()}`, 2200);
+        }
+        function finishStoryLevel() {
+            const level = Number(gameState.storyLevel) || 1;
+            const mistakes = Number(gameState.totalWrongMoves) || 0;
+            const hints = Number(gameState.hintsUsed) || 0;
+            const stars = mistakes <= 1 && hints === 0 ? 3 : mistakes <= 4 ? 2 : 1;
+            const oldStars = Number(storyProgress.stars[level]) || 0;
+            if (stars > oldStars) {
+                storyProgress.stars[level] = stars;
+                storyProgress.totalStars += stars - oldStars;
+            }
+            storyProgress.unlocked = Math.max(storyProgress.unlocked, level + 1);
+            saveStoryProgress();
+            gameState.storyLevel = null;
+            gameState.storyModeActive = false;
+            showToast(`⭐ Level ${level} cleared · ${stars} star${stars === 1 ? '' : 's'} · Level ${level + 1} unlocked!`, 3500);
+        }
+
+        // ============================================
         // EVENT LISTENERS
         // ============================================
         function setupEventListeners() {
@@ -1604,8 +1697,9 @@
                     document.querySelectorAll('.time-card').forEach(c => c.classList.remove('active'));
                     card.classList.add('active');
                     if (card.dataset.time === 'custom') {
-                        const mins = parseInt(prompt('Custom time limit (minutes):', '12'));
-                        gameState.timeLimit = (!isNaN(mins) && mins > 0) ? mins * 60 : 600;
+                        const mins = parseInt(prompt('Custom time limit (1–20 minutes):', '12'));
+                        if (Number.isFinite(mins) && (mins < 1 || mins > 20)) showToast('Choose a time between 1 and 20 minutes.', 2200);
+                        gameState.timeLimit = (!isNaN(mins) && mins >= 1) ? Math.max(1, Math.min(20, mins)) * 60 : 600;
                     } else {
                         gameState.timeLimit = parseInt(card.dataset.time) || 600;
                     }
@@ -1694,10 +1788,20 @@
             });
 
             // Start game
-            document.getElementById('start-game-btn').addEventListener('click', startGame);
+            document.getElementById('start-game-btn').addEventListener('click', () => {
+                if (gameState.gameMode === 'solveoff') {
+                    showToast('Competitive Solve-Off is an online match. Use Lagos Life Quick Match, Create Match, or Join Code.', 3200);
+                    return;
+                }
+                startGame();
+            });
             document.getElementById('solo-sudoku-btn').addEventListener('click', () => {
+                gameState.storyModeActive = false; gameState.storyLevel = null;
                 document.getElementById('difficulty-modal').classList.add('active');
             });
+            document.getElementById('story-mode-btn')?.addEventListener('click', openStoryMap);
+            document.getElementById('story-map-close')?.addEventListener('click', () => document.getElementById('story-map-modal')?.classList.remove('active'));
+            document.getElementById('story-map-modal')?.addEventListener('click', e => { if (e.target.id === 'story-map-modal') e.currentTarget.classList.remove('active'); });
 
             // Inject Daily Challenge button into lobby if not already there
             (function injectDailyChallengeBtn() {
@@ -1722,19 +1826,19 @@
                     display:flex;align-items:center;gap:12px;
                 `;
                 btn.innerHTML = done
-                    ? \`<span style="font-size:1.4rem;">✅</span>
+                    ? `<span style="font-size:1.4rem;">✅</span>
                        <div>
                          <div>Daily Challenge — Done!</div>
-                         <div style="font-size:0.75rem;color:#666;margin-top:2px;">\${dcResult?.score?.toLocaleString?.() || ''} pts · Come back tomorrow</div>
-                       </div>\`
-                    : \`<span style="font-size:1.4rem;">📅</span>
+                         <div style="font-size:0.75rem;color:#666;margin-top:2px;">${dcResult?.score?.toLocaleString?.() || ''} pts · Come back tomorrow</div>
+                       </div>`
+                    : `<span style="font-size:1.4rem;">📅</span>
                        <div>
                          <div>Daily Challenge</div>
                          <div style="font-size:0.75rem;color:#777;margin-top:2px;">New puzzle every day · Hard difficulty</div>
                        </div>
                        <div style="margin-left:auto;background:#d59020;color:#161512;
                                    font-size:0.65rem;font-weight:800;padding:3px 7px;
-                                   border-radius:4px;">NEW</div>\`;
+                                   border-radius:4px;">NEW</div>`;
 
                 btn.addEventListener('click', () => {
                     if (!done) launchDailyChallenge();
@@ -2200,7 +2304,11 @@
             if (!gameState.isPaused) {
                 if (gameState.gameMode === 'solo') {
                     gameState.dojoElapsed = (gameState.dojoElapsed || 0) + delta;
-                } else if (gameState.gameMode === 'simultaneous') {
+                } else if (gameState.gameMode === 'simultaneous' || gameState.gameMode === 'pvp') {
+                    gameState.timeRemaining -= delta;
+                    gameState.p1Time = gameState.timeRemaining;
+                    gameState.p2Time = gameState.timeRemaining;
+                } else if (gameState.gameMode === 'solveoff') {
                     gameState.timeRemaining -= delta;
                     gameState.p1Time = gameState.timeRemaining;
                     gameState.p2Time = gameState.timeRemaining;
@@ -2851,23 +2959,26 @@
 
                 // Penalty: lose 10 seconds of time (not applicable in untimed solo mode)
                 const PENALTY_SECONDS = 10;
-                if (gameState.gameMode === 'simultaneous') {
+                if (gameState.gameMode === 'simultaneous' || gameState.gameMode === 'pvp') {
                     gameState.timeRemaining = Math.max(0, gameState.timeRemaining - PENALTY_SECONDS);
                     gameState.p1Time = gameState.timeRemaining;
                     gameState.p2Time = gameState.timeRemaining;
                 } else if (gameState.gameMode === 'passplay') {
-                    gameState.p1Time = Math.max(0, gameState.p1Time - PENALTY_SECONDS);
+                    const activeTimer = gameState.currentPlayer === 2 ? 'p2Time' : 'p1Time';
+                    gameState[activeTimer] = Math.max(0, gameState[activeTimer] - PENALTY_SECONDS);
+                } else if (gameState.gameMode === 'solveoff') {
+                    showToast('Incorrect number — try again. Your clock keeps running.', 1800);
                 }
                 // solo mode is untimed (dojoElapsed counts up) — no time penalty applied
 
-                // Show penalty toast
-                showPenaltyToast(PENALTY_SECONDS);
+                // Show time penalties only for modes that use them. Solve-Off entries are simply rejected.
+                if (gameState.gameMode !== 'solveoff') showPenaltyToast(PENALTY_SECONDS);
 
                 // Play error sound
                 playSound('error');
 
                 // 3 wrong moves → deduct 500 points (if any) and show warning
-                if (gameState.wrongMoves >= gameState.maxWrongMoves) {
+                if (gameState.gameMode !== 'solveoff' && gameState.wrongMoves >= gameState.maxWrongMoves) {
                     const deduct = 500;
                     gameState.scores.p1 = Math.max(0, gameState.scores.p1 - deduct);
                     _lastCorrectMoveTime = 0; // reset speed bonus as punishment
@@ -2888,7 +2999,7 @@
                 return;
             }
             
-            const player = gameState.gameMode === 'passplay' ? gameState.currentPlayer : 1;
+            const player = gameState.gameMode === 'passplay' ? gameState.currentPlayer : (gameState.gameMode === 'pvp' ? (gameState.vatarSlot || 1) : 1);
             
             // ── Speed-based scoring (mirrors reference app) ──────────────
             // Base: 200 pts per cell. Speed bonus: up to +300 if placed in <5s,
@@ -2901,7 +3012,7 @@
                 pointsEarned = 200 + speedBonus;
                 _lastCorrectMoveTime = now_;
             }
-            gameState.scores.p1 += pointsEarned;
+            gameState.scores[player === 2 ? 'p2' : 'p1'] += pointsEarned;
 
             // Clear pencil marks from this cell
             if (gameState.pencilMarks && gameState.pencilMarks[row] && gameState.pencilMarks[row][col]) {
@@ -3161,13 +3272,15 @@
                 }
             }
             if (!isFull) return;
-            if (gameState.gameMode === 'solo') { endGame(1, 'solved'); return; }
+            if (gameState.gameMode === 'solo' || gameState.gameMode === 'solveoff') { endGame(1, 'solved'); return; }
             endGameByCells();
         }
 
         function endGameByTimeout() {
             if (gameState.gameMode === 'solo') return; // solo is untimed
-            if (gameState.gameMode === 'passplay') {
+            if (gameState.gameMode === 'solveoff') {
+                endGame(2, 'timeout');
+            } else if (gameState.gameMode === 'passplay') {
                 endGame(gameState.p1Time <= 0 ? 2 : 1, 'timeout');
             } else {
                 endGameByCells();
@@ -3246,9 +3359,9 @@
                 const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
                 const isDaily = gameState.isDailyChallenge;
-                icon.textContent  = solved ? (isDaily ? '📅' : '🎉') : '🤔';
-                title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : 'Puzzle Complete!') : 'Keep Going!';
-                subtitle.textContent = solved ? \`Solved in \${timeStr}\` : \`Time elapsed: \${timeStr}\`;
+                icon.textContent  = solved ? (isDaily ? '📅' : (gameState.storyModeActive ? '🗺️' : '🎉')) : '🤔';
+                title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : (gameState.storyModeActive ? `Story Level ${gameState.storyLevel} Complete!` : 'Puzzle Complete!')) : 'Keep Going!';
+                subtitle.textContent = solved ? `Solved in ${timeStr}` : `Time elapsed: ${timeStr}`;
 
                 // Best time tracking
                 const diff = gameState.difficulty || 'medium';
@@ -3314,27 +3427,29 @@
                     // Update daily challenge label in lobby if visible
                     const dcBtn = document.getElementById('daily-challenge-lobby-btn');
                     if (dcBtn) {
-                        dcBtn.innerHTML = dcBtn.innerHTML.replace('Play Today's Challenge', '✅ Done for today!');
+                        dcBtn.innerHTML = dcBtn.innerHTML.replace("Play Today's Challenge", '✅ Done for today!');
                         dcBtn.style.opacity = '0.6';
                     }
                 }
                 if (gameState.dojoTechniqueId && solved) {
                     completeDojoPuzzle();
                 }
+                if (gameState.storyModeActive && solved) finishStoryLevel();
 
             } else {
-                // ── PvP mode ───────────────────────────────────────────
+                // ── Competitive modes ───────────────────────────────────
                 grid.style.display = 'grid';
                 grid.style.gridTemplateColumns = '1fr 1fr';
-                grid.innerHTML = `
-                    <div class="result-stat p1">
-                        <div class="result-stat-value">${gameState.scores.p1}</div>
-                        <div class="result-stat-label">Your Cells</div>
-                    </div>
-                    <div class="result-stat p2">
-                        <div class="result-stat-value">${gameState.scores.p2}</div>
-                        <div class="result-stat-label">Opponent</div>
-                    </div>`;
+                if (gameState.gameMode === 'solveoff') {
+                    const elapsed = Math.max(0, Math.round((gameState.timeLimit || 600) - (gameState.timeRemaining || 0)));
+                    grid.innerHTML = `
+                        <div class="result-stat p1"><div class="result-stat-value">${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}</div><div class="result-stat-label">Your solve time</div></div>
+                        <div class="result-stat p2"><div class="result-stat-value">${gameState.totalWrongMoves || 0}</div><div class="result-stat-label">Incorrect entries</div></div>`;
+                } else {
+                    grid.innerHTML = `
+                        <div class="result-stat p1"><div class="result-stat-value">${gameState.scores.p1}</div><div class="result-stat-label">Your Cells</div></div>
+                        <div class="result-stat p2"><div class="result-stat-value">${gameState.scores.p2}</div><div class="result-stat-label">Opponent</div></div>`;
+                }
 
                 // Rating display
                 document.getElementById('old-rating').textContent = oldRating.toFixed(1);
@@ -3350,20 +3465,23 @@
                     deltaEl.textContent = '(+0.0)';
                     document.getElementById('rating-change').className = 'rating-change';
                 }
-                ratingWrap.style.display = 'block';
+                ratingWrap.style.display = gameState.gameMode === 'solveoff' ? 'none' : 'block';
 
                 if (winner === 1) {
                     icon.textContent  = '🏆';
                     title.textContent = 'You Win!';
                     subtitle.textContent = reason === 'resign'  ? 'Opponent resigned' :
                                           reason === 'timeout' ? 'Opponent ran out of time' :
+                                          reason === 'opponent_solved' ? 'Your opponent solved their board first' :
                                           reason === 'time'    ? 'More time remaining' :
+                                          reason === 'solved' && gameState.gameMode === 'solveoff' ? 'You completed the puzzle correctly first' :
                                           'Most cells claimed';
                 } else if (winner === 2) {
                     icon.textContent  = '😔';
                     title.textContent = 'You Lose';
                     subtitle.textContent = reason === 'resign'  ? 'You resigned' :
                                           reason === 'timeout' ? 'You ran out of time' :
+                                          reason === 'opponent_solved' ? 'Your opponent solved their board first' :
                                           reason === 'time'    ? 'Opponent had more time' :
                                           'Opponent claimed more cells';
                 } else {
@@ -6412,6 +6530,8 @@
                 c.addEventListener('click', updateVariantBadge);
             });
 
+            // Refresh saved story progress when the lobby initializes.
+            saveStoryProgress();
             // Hide splash after app is ready
             setTimeout(hideSplash, 1400);
         }
@@ -6419,253 +6539,396 @@
         init();
 
     // ============================================================
-    // VATAR GAMES SDK INTEGRATION
-    // Detects whether the game is running inside a Lagos Life /
-    // Vatar world frame. If yes, uses Vatar for player identity,
-    // leaderboard, multiplayer rooms, pause/resume, and purchases.
-    // Falls back silently to the existing Supabase / guest flow.
+    // LAGOS LIFE / VATAR GAMES SDK INTEGRATION (SDK v1)
+    // Uses the documented global `Vatar` API. Vatar handles identity,
+    // match discovery, score leaderboard and purchase checkout. Paid
+    // entitlements are granted only after our server verifies delivery.
     // ============================================================
     (async function initVatar() {
-        // The SDK sets window.vatar only inside the Vatar frame.
-        if (!window.vatar) return;
-        console.log('[Vatar] SDK detected — running in Vatar world');
+        const V = window.Vatar;
+        if (!V || typeof V.init !== 'function') return; // standalone/PWA mode
 
-        // ── 1. PLAYER IDENTITY ──────────────────────────────────
         let vatarPlayer = null;
+        let activeVatarMatch = null;
+        let startedVatarMatchId = null;
+        let unsubscribeMatch = null;
+        let vatarMovePoll = null;
+        let vatarMoveSeq = 0;
+        let vatarRelayMatchId = null;
+        let vatarBaseMakeMove = null;
+        let vatarPaused = false;
+        const statusEl = document.getElementById('vatar-player-status');
+        const panel = document.getElementById('vatar-match-panel');
+
+        const setStatus = (message) => { if (statusEl) statusEl.textContent = message; };
+        const vatarError = (err) => {
+            const code = err?.code || err?.message || 'unknown error';
+            console.warn('[Vatar]', code, err);
+            showToast('Lagos Life: ' + String(code).replaceAll('_', ' '), 3000);
+        };
+
         try {
-            vatarPlayer = await window.vatar.init();
-            console.log('[Vatar] Player:', vatarPlayer.displayName, vatarPlayer.id);
-        } catch (e) {
-            console.warn('[Vatar] init() failed:', e);
-            return; // give up; fall back to Supabase/guest
+            const result = await V.init();
+            vatarPlayer = result.player;
+            if (!vatarPlayer?.id) throw new Error('missing_player');
+            console.log('[Vatar] SDK v1 ready:', vatarPlayer.name, result.mode);
+        } catch (err) {
+            console.warn('[Vatar] SDK init unavailable; keeping standalone mode.', err);
+            return;
         }
 
-        // Synthesise a currentUser-compatible object so the rest of
-        // the app (scoring, ratings, etc.) treats Vatar players the
-        // same as Supabase users.
-        const vatarUserId = 'vatar_' + vatarPlayer.id;
-        currentUser = {
-            id:            vatarUserId,
-            user_metadata: { username: vatarPlayer.displayName },
-        };
+        // Adapt the Lagos Life pseudonymous player to the existing profile UI.
+        const displayName = vatarPlayer.name || 'Lagos Life Player';
+        const avatarUrl = vatarPlayer.avatar || null;
+        const localId = 'vatar_' + vatarPlayer.id;
+        currentUser = { id: localId, user_metadata: { username: displayName } };
         currentProfile = {
-            id:          vatarUserId,
-            username:    vatarPlayer.displayName,
-            avatar_url:  vatarPlayer.avatarUrl || null,
-            rating:      playerData.rating || 1500,
-            games_played: 0, wins: 0, losses: 0, draws: 0, best_streak: 0,
+            id: localId, username: displayName, avatar_url: avatarUrl,
+            rating: playerData.rating || 1500, games_played: 0, wins: 0,
+            losses: 0, draws: 0, best_streak: 0
         };
-
-        // Populate username in playerData so it appears everywhere
-        playerData.settings.username = vatarPlayer.displayName;
-        playerData.settings.avatarUrl = vatarPlayer.avatarUrl || null;
+        playerData.settings.username = displayName;
+        playerData.settings.avatarUrl = avatarUrl;
         savePlayerData();
 
-        // ── 2. AUTH UI — show player as signed in ───────────────
-        // Wait a tick for the DOM to be ready
-        setTimeout(() => {
-            const usernameEl = document.getElementById('menu-username');
-            const avatarEl   = document.getElementById('menu-avatar');
-            const authBtn    = document.getElementById('side-auth-btn');
-            const signoutBtn = document.getElementById('side-signout-btn');
-
-            if (usernameEl) usernameEl.textContent = vatarPlayer.displayName;
-            if (avatarEl) {
-                if (vatarPlayer.avatarUrl) {
-                    avatarEl.innerHTML = `<img src="${vatarPlayer.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
-                } else {
-                    avatarEl.textContent = vatarPlayer.displayName[0].toUpperCase();
-                }
-            }
-            if (authBtn) { authBtn.textContent = vatarPlayer.displayName; authBtn.classList.add('signed-in'); }
-            // Hide sign-out — Vatar manages sessions
-            if (signoutBtn) signoutBtn.style.display = 'none';
-
-            // Show the "buy hints" button now that we're in Vatar
-            const buyHintsBtn = document.getElementById('vatar-buy-hints-btn');
-            if (buyHintsBtn) buyHintsBtn.style.display = 'inline-flex';
-
-            // Hide Supabase config box & auth modal (not needed in Vatar)
-            const configBox = document.getElementById('supabase-config-box');
-            if (configBox) configBox.style.display = 'none';
-            const authModal = document.getElementById('auth-modal');
-            if (authModal) authModal.classList.remove('active');
-
-            // Show online buttons as if connected
-            const onlineBtns = document.getElementById('online-buttons');
-            if (onlineBtns) onlineBtns.style.display = 'flex';
-        }, 100);
-
-        // ── 3. SCORE SUBMISSION ──────────────────────────────────
-        // Wrap endGame to submit score to Vatar leaderboard.
-        // endGame is the function that calculates the final score
-        // and shows the result modal.
-        const _origEndGame = window.endGame || null;
-        // We patch the result modal's show path instead, so we
-        // capture every game-end regardless of how it's triggered.
-        const _origShowResultModal = window.showResultModal;
-        function vatarSubmitScore(score) {
-            if (typeof score !== 'number' || score <= 0) return;
-            // Rate-limit: Vatar allows one submitScore every 20 seconds
-            const now = Date.now();
-            if (vatarSubmitScore._lastAt && now - vatarSubmitScore._lastAt < 21000) return;
-            vatarSubmitScore._lastAt = now;
-            window.vatar.submitScore(Math.round(score))
-                .then(() => console.log('[Vatar] Score submitted:', score))
-                .catch(e => console.warn('[Vatar] submitScore failed:', e));
+        if (panel) panel.style.display = 'flex';
+        setStatus('Signed in as ' + displayName + ' · ' + (result.mode === 'test' ? 'Sandbox' : 'Lagos Life'));
+        const usernameEl = document.getElementById('menu-username');
+        const avatarEl = document.getElementById('menu-avatar');
+        const authBtn = document.getElementById('side-auth-btn');
+        const signoutBtn = document.getElementById('side-signout-btn');
+        if (usernameEl) usernameEl.textContent = displayName;
+        if (avatarEl) {
+            if (avatarUrl) avatarEl.innerHTML = `<img src="${avatarUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+            else avatarEl.textContent = displayName.slice(0, 1).toUpperCase();
         }
-        vatarSubmitScore._lastAt = 0;
+        if (authBtn) { authBtn.textContent = displayName; authBtn.classList.add('signed-in'); }
+        if (signoutBtn) signoutBtn.style.display = 'none';
+        const configBox = document.getElementById('supabase-config-box');
+        if (configBox) configBox.style.display = 'none';
+        const authModal = document.getElementById('auth-modal');
+        if (authModal) authModal.classList.remove('active');
+        const buyHintsBtn = document.getElementById('vatar-buy-hints-btn');
+        const buyThemeBtn = document.getElementById('vatar-buy-theme-btn');
+        if (buyHintsBtn) buyHintsBtn.style.display = 'inline-flex';
+        if (buyThemeBtn) buyThemeBtn.style.display = 'inline-flex';
 
-        // Hook into the game-end score: listen for the result modal
-        // being displayed, then grab the score from gameState.
+        // Leaderboard score: Vatar accepts a whole-number best score at most every 20s.
+        let lastScoreAt = 0;
+        const submitVatarScore = async (score) => {
+            if (!Number.isFinite(score) || score <= 0 || Date.now() - lastScoreAt < 20000) return;
+            lastScoreAt = Date.now();
+            try { await V.submitScore(Math.round(score)); }
+            catch (err) { console.warn('[Vatar] score not submitted:', err?.code || err); }
+        };
         const resultModal = document.getElementById('result-modal');
         if (resultModal) {
-            const observer = new MutationObserver(() => {
-                if (resultModal.classList.contains('active')) {
-                    const score = gameState?.scores?.p1 ?? 0;
-                    vatarSubmitScore(score);
-                }
-            });
-            observer.observe(resultModal, { attributes: true, attributeFilter: ['class'] });
+            new MutationObserver(() => {
+                if (resultModal.classList.contains('active')) submitVatarScore(gameState?.scores?.p1 ?? 0);
+            }).observe(resultModal, { attributes: true, attributeFilter: ['class'] });
         }
 
-        // ── 4. PAUSE / RESUME ────────────────────────────────────
-        window.vatar.onPause(() => {
-            console.log('[Vatar] Paused');
-            if (gameState && gameState.running) {
-                gameState._vatarPaused = true;
-                gameState.running = false; // stop game loop ticks
+        // Vatar's match API provides discovery and lifecycle, not arbitrary game events.
+        // Until the server-side move relay and result verifier are deployed, only create
+        // zero-stake friendlies; never enable stakes from the browser.
+        const updateMatch = async (match) => {
+            if (!match) return;
+            activeVatarMatch = match;
+            if (match.code) {
+                const codeInput = document.getElementById('vatar-join-code');
+                if (codeInput) codeInput.value = match.code;
             }
-        });
-        window.vatar.onResume(() => {
-            console.log('[Vatar] Resumed');
-            if (gameState && gameState._vatarPaused) {
-                gameState._vatarPaused = false;
-                gameState.running = true;
-            }
-        });
-
-        // ── 5. MULTIPLAYER ROOMS via Vatar match API ─────────────
-        // Replace "Create Room" and "Quick Match" buttons with
-        // Vatar's native match system when in Vatar mode.
-        setTimeout(() => {
-            // Create Room button
-            const createRoomBtn = document.getElementById('create-room-btn');
-            if (createRoomBtn) {
-                createRoomBtn.addEventListener('click', async (e) => {
-                    e.stopImmediatePropagation();
-                    try {
-                        const match = await window.vatar.match.create({
-                            minPlayers: 2,
-                            maxPlayers: 2,
-                            metadata: {
-                                difficulty: gameState.difficulty || 'medium',
-                                timeLimit:  gameState.timeLimit  || 0,
-                                variant:    gameState.variant    || 'classic',
-                            },
-                        });
-                        console.log('[Vatar] Match created:', match.id);
-                        startVatarMatch(match);
-                    } catch(e) {
-                        showToast('Could not create room: ' + (e.message || e), 3000);
+            const players = Array.isArray(match.players) ? match.players : [];
+            if (match.status === 'open') {
+                setStatus('Match room ' + (match.code || '') + ' · waiting for opponent');
+                const waitTitle = document.getElementById('waiting-title');
+                if (waitTitle) waitTitle.textContent = 'Waiting for Lagos Life opponent…';
+            } else if (match.status === 'playing') {
+                setStatus('Match found · ' + players.map(p => p.name || p.id).join(' vs '));
+                if (startedVatarMatchId === match.id) return;
+                startedVatarMatchId = match.id;
+                // The first player to configure a friendly match fixes its mode, puzzle
+                // difficulty, variant and clock. The server returns that same config to
+                // the second player, preventing different local selections from producing
+                // different starting boards. This remains non-authoritative for stakes.
+                const requestedMode = gameState.gameMode === 'solveoff' ? 'solveoff' : 'simultaneous';
+                try {
+                    const { session } = await V.session();
+                    const cfgResponse = await fetch('/api/vatar/solveoff/config', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ session, matchId: match.id, config: {
+                            mode: requestedMode, timeLimit: gameState.timeLimit,
+                            difficulty: gameState.difficulty || 'medium', variant: gameState.variant || 'classic'
+                        } })
+                    });
+                    if (cfgResponse.ok) {
+                        const saved = await cfgResponse.json();
+                        const cfg = saved.config || {};
+                        gameState.gameMode = cfg.mode === 'solveoff' ? 'solveoff' : 'simultaneous';
+                        gameState.timeLimit = Math.max(60, Math.min(1200, Number(cfg.timeLimit) || 600));
+                        gameState.difficulty = cfg.difficulty || 'medium';
+                        gameState.variant = cfg.variant || 'classic';
+                        document.querySelectorAll('.mode-card[data-mode]').forEach(card => card.classList.toggle('active', card.dataset.mode === gameState.gameMode));
+                        document.querySelectorAll('.time-card').forEach(card => card.classList.toggle('active', card.dataset.time !== 'custom' && Number(card.dataset.time) === gameState.timeLimit));
+                    } else {
+                        gameState.gameMode = requestedMode;
+                        console.warn('[Vatar] shared match config unavailable; friendly match uses local settings');
                     }
-                }, true); // capture phase to override existing handler
-            }
-
-            // Quick Match (Find Opponent) button
-            const quickMatchBtn = document.getElementById('quick-match-btn')
-                || document.querySelector('[onclick*="findOpponent"]');
-            if (quickMatchBtn) {
-                quickMatchBtn.addEventListener('click', async (e) => {
-                    e.stopImmediatePropagation();
-                    try {
-                        showToast('🔍 Finding opponent…', 2000);
-                        const match = await window.vatar.match.quickMatch({
-                            minPlayers: 2,
-                            maxPlayers: 2,
-                        });
-                        console.log('[Vatar] Quick match found:', match.id);
-                        startVatarMatch(match);
-                    } catch(e) {
-                        showToast('No opponent found: ' + (e.message || e), 3000);
+                } catch (configError) {
+                    gameState.gameMode = requestedMode;
+                    console.warn('[Vatar] shared match config failed:', configError);
+                }
+                // Ensure both clients use a deterministic puzzle for this match id.
+                // This synchronizes generation only; the server still does not verify solutions.
+                const seedText = String(match.id || match.code || 'sudoku-vatar');
+                let seed = 2166136261;
+                for (let i = 0; i < seedText.length; i++) seed = Math.imul(seed ^ seedText.charCodeAt(i), 16777619) >>> 0;
+                const originalRandom = Math.random;
+                Math.random = function () {
+                    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+                    return seed / 4294967296;
+                };
+                try {
+                    const chosenMode = gameState.gameMode === 'solveoff' ? 'solveoff' : 'simultaneous';
+                    gameState.gameMode = chosenMode === 'solveoff' ? 'solveoff' : 'pvp';
+                    gameState.vsAI = false;
+                    gameState.vatarSlot = Math.max(1, players.findIndex(p => p.id === vatarPlayer.id) + 1);
+                    gameState.playerName = displayName;
+                    const opponent = players.find(p => p.id !== vatarPlayer.id);
+                    gameState.opponentName = opponent?.name || 'Opponent';
+                    startGame();
+                    // If the match payload provides a server start timestamp, account for
+                    // setup/network delay so both clients' clocks share the same start.
+                    const rawMatchStart = match.startedAt ?? match.started_at ?? match.startedAtIso ?? '';
+                    const matchStartedAt = typeof rawMatchStart === 'number' ? (rawMatchStart < 1e12 ? rawMatchStart * 1000 : rawMatchStart) : Date.parse(rawMatchStart || '');
+                    if (Number.isFinite(matchStartedAt) && matchStartedAt > 0 && gameState.gameMode !== 'solo') {
+                        const elapsed = Math.max(0, (Date.now() - matchStartedAt) / 1000);
+                        gameState.timeRemaining = Math.max(0, gameState.timeLimit - elapsed);
+                        gameState.p1Time = gameState.timeRemaining;
+                        gameState.p2Time = gameState.timeRemaining;
+                        gameState.lastTick = Date.now();
+                        updateTimerDisplay();
                     }
+                    const gameModeLabel = document.getElementById('game-mode-label');
+                    if (gameModeLabel) gameModeLabel.textContent = gameState.gameMode === 'solveoff' ? 'Competitive Solve-Off' : 'Cell Capture';
+                    startVatarMoveRelay(match.id);
+                    showToast('Lagos Life match started. Friendly match only; server-side result settlement is not enabled.', 3500);
+                } finally { Math.random = originalRandom; }
+            } else if (match.status === 'done') {
+                stopVatarMoveRelay();
+                setStatus('Match complete · winner: ' + (match.winner || 'draw'));
+                showToast('Lagos Life match finished.', 2500);
+            } else if (match.status === 'cancelled' || match.status === 'void') {
+                setStatus('Match ended without a result.');
+            }
+        };
+
+        try {
+            const current = await V.match.current();
+            if (current) updateMatch(current);
+        } catch (err) { console.info('[Vatar] no current match:', err?.code || err); }
+        try {
+            unsubscribeMatch = V.match.onUpdate(updateMatch);
+        } catch (err) { console.warn('[Vatar] match updates unavailable:', err); }
+
+        const stopVatarMoveRelay = () => {
+            if (vatarMovePoll) clearInterval(vatarMovePoll);
+            vatarMovePoll = null;
+            vatarRelayMatchId = null;
+        };
+        const postVatarMove = async (row, col, value) => {
+            const matchId = vatarRelayMatchId;
+            if (!matchId) return;
+            try {
+                const { session } = await V.session();
+                await fetch('/api/vatar/move', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session, matchId, row, col, value })
+                });
+            } catch (err) { console.warn('[Vatar] move relay failed:', err); }
+        };
+        const startVatarMoveRelay = (matchId) => {
+            stopVatarMoveRelay();
+            vatarRelayMatchId = matchId;
+            vatarMoveSeq = 0;
+            if (!vatarBaseMakeMove) {
+                vatarBaseMakeMove = makeMove;
+                makeMove = function(number) {
+                    const cell = gameState.selectedCell ? { ...gameState.selectedCell } : null;
+                    const beforeClaim = cell ? gameState.claims[cell.row][cell.col] : null;
+                    vatarBaseMakeMove(number);
+                    if (!cell || beforeClaim !== 0 || !vatarRelayMatchId || gameState.gameMode === 'solveoff') return;
+                    if (gameState.claims[cell.row][cell.col] === (gameState.vatarSlot || 1) && gameState.puzzle[cell.row][cell.col] === number) {
+                        postVatarMove(cell.row, cell.col, number);
+                    }
+                };
+            }
+            const poll = async () => {
+                if (!activeVatarMatch || activeVatarMatch.id !== matchId || vatarPaused) return;
+                try {
+                    const { session } = await V.session();
+                    const response = await fetch('/api/vatar/moves', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+                        body: JSON.stringify({ session, matchId, after: vatarMoveSeq })
+                    });
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    for (const move of (data.moves || [])) {
+                        vatarMoveSeq = Math.max(vatarMoveSeq, move.seq || 0);
+                        if (move.playerId === vatarPlayer.id) continue;
+                        if (move.type === 'solved' && gameState.gameMode === 'solveoff' && gameState.isRunning) {
+                            gameState.isRunning = false;
+                            endGame(2, 'opponent_solved');
+                            continue;
+                        }
+                        if (gameState.gameMode === 'solveoff') continue;
+                        if (gameState.claims?.[move.row]?.[move.col] !== 0) continue;
+                        if (gameState.solution?.[move.row]?.[move.col] !== move.value) continue;
+                        const opponentSlot = gameState.vatarSlot === 1 ? 2 : 1;
+                        claimCell(move.row, move.col, move.value, opponentSlot);
+                        gameState.scores[opponentSlot === 2 ? 'p2' : 'p1'] += 199;
+                        updateScores();
+                        updateRemainingCounts();
+                        updateNumberPadVisuals();
+                        checkGameEnd();
+                    }
+                } catch (err) { console.warn('[Vatar] move polling failed:', err); }
+            };
+            vatarMovePoll = setInterval(poll, 900);
+            poll();
+        };
+
+        const postVatarSolved = async () => {
+            const matchId = vatarRelayMatchId;
+            if (!matchId) return;
+            try {
+                const { session } = await V.session();
+                await fetch('/api/vatar/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session, matchId, type: 'solved' }) });
+            } catch (err) { console.warn('[Vatar] solve result relay failed:', err); }
+        };
+        const vatarEndGameBase = endGame;
+        endGame = function(winner, reason) {
+            if (gameState.gameMode === 'solveoff' && winner === 1 && reason === 'solved') postVatarSolved();
+            if (gameState.gameMode === 'solveoff' && reason === 'opponent_solved') reason = 'opponent_solved';
+            return vatarEndGameBase(winner, reason);
+        };
+
+        const createVatarMatch = async () => {
+            try {
+                const match = await V.match.create({ stake: 0, seats: 2 });
+                updateMatch(match);
+                showToast(match.code ? 'Room created. Share code: ' + match.code : 'Lagos Life room created.', 3500);
+            } catch (err) { vatarError(err); }
+        };
+        const quickVatarMatch = async () => {
+            try {
+                setStatus('Finding an opponent…');
+                const match = await V.match.quick({ stake: 0 });
+                updateMatch(match);
+            } catch (err) { setStatus('Could not find a match. Try again.'); vatarError(err); }
+        };
+        const joinVatarMatch = async () => {
+            const input = document.getElementById('vatar-join-code');
+            const code = (input?.value || '').trim().toUpperCase();
+            if (!/^[A-Z0-9]{6}$/.test(code)) { showToast('Enter the six-letter match code.', 2200); return; }
+            try { updateMatch(await V.match.join(code)); }
+            catch (err) { vatarError(err); }
+        };
+
+        document.getElementById('vatar-create-match')?.addEventListener('click', createVatarMatch);
+        document.getElementById('vatar-quick-match')?.addEventListener('click', quickVatarMatch);
+        document.getElementById('vatar-join-match')?.addEventListener('click', joinVatarMatch);
+        document.getElementById('vatar-join-code')?.addEventListener('keydown', e => { if (e.key === 'Enter') joinVatarMatch(); });
+
+        // In the Lagos Life frame, route the legacy online buttons to native Vatar matchmaking.
+        // The old Supabase flow remains available when opened as a standalone web app.
+        const intercept = (id, action) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('click', e => {
+                e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+                action();
+            }, true);
+        };
+        intercept('create-room-btn', createVatarMatch);
+        intercept('find-opponent-btn', quickVatarMatch);
+        intercept('join-room-btn', () => {
+            const modal = document.getElementById('join-room-modal');
+            if (modal) modal.classList.add('active');
+            const confirm = document.getElementById('join-confirm-btn');
+            if (confirm && !confirm.dataset.vatarBound) {
+                confirm.dataset.vatarBound = '1';
+                confirm.addEventListener('click', e => {
+                    e.preventDefault(); e.stopImmediatePropagation();
+                    const code = (document.getElementById('join-code-input')?.value || '').trim().toUpperCase();
+                    const vatarCode = document.getElementById('vatar-join-code');
+                    if (vatarCode) vatarCode.value = code;
+                    joinVatarMatch();
+                    modal?.classList.remove('active');
                 }, true);
             }
-        }, 200);
-
-        async function startVatarMatch(match) {
-            // Determine our slot (host = P1, joiner = P2)
-            const isHost = match.players[0]?.id === vatarPlayer.id;
-            const opponent = match.players.find(p => p.id !== vatarPlayer.id);
-
-            gameState.gameMode   = 'pvp';
-            gameState.vsAI       = false;
-            gameState.playerName = vatarPlayer.displayName;
-            gameState.opponentName = opponent?.displayName || 'Opponent';
-
-            showToast(`⚔️ Match found! vs ${gameState.opponentName}`, 2500);
-
-            // Set up move relay via Vatar match events
-            match.onEvent('move', (data) => {
-                if (data.playerId !== vatarPlayer.id) {
-                    applyOpponentMove(data.row, data.col, data.value);
-                }
-            });
-
-            // Expose function so makeMove can relay moves
-            window._vatarMatch = match;
-
-            startGame();
-        }
-
-        // Relay local moves to opponent through Vatar match events
-        const _origMakeMove = window.makeMove;
-        // Patch the move broadcast: after a move is made, send it via Vatar
-        const _origClaimCell = window.claimCell;
-
-        // ── 6. PURCHASES ─────────────────────────────────────────
-        // Products (prices in whole naira, ₦100–₦50,000)
-        const VATAR_PRODUCTS = {
-            'hints-5':   { label: '5 Hints',     price: 200  },
-            'hints-20':  { label: '20 Hints',    price: 500  },
-            'theme-gold':{ label: 'Gold Theme',  price: 1000 },
-        };
-
-        // Check for previously purchased items on load
-        try {
-            const pending = await window.vatar.purchases();
-            for (const purchase of pending) {
-                deliverVatarPurchase(purchase.productId);
-            }
-        } catch(e) { /* ignore */ }
-
-        // Listen for new purchases while the game is open
-        window.vatar.onPurchase((purchase) => {
-            deliverVatarPurchase(purchase.productId);
         });
 
-        function deliverVatarPurchase(productId) {
-            if (productId === 'hints-5')  { playerData.hints = (playerData.hints || 0) + 5;  savePlayerData(); updateHintDisplay(); showToast('🎉 +5 Hints added!', 2500); }
-            if (productId === 'hints-20') { playerData.hints = (playerData.hints || 0) + 20; savePlayerData(); updateHintDisplay(); showToast('🎉 +20 Hints added!', 2500); }
-            if (productId === 'theme-gold') { applyTheme('gold'); showToast('✨ Gold Theme unlocked!', 2500); }
-        }
-
-        function updateHintDisplay() {
-            const hintCount = document.getElementById('hint-count') || document.querySelector('.hint-count');
-            if (hintCount) hintCount.textContent = playerData.hints || 0;
-        }
-
-        // Expose buy function globally so the UI can call it
-        window.vatarBuy = async function(productId) {
-            if (!VATAR_PRODUCTS[productId]) return;
-            try {
-                await window.vatar.purchase(productId);
-            } catch(e) {
-                showToast('Purchase cancelled', 1500);
+        // Purchases are only delivered after server-side verification. The server endpoint
+        // is included in server/ and must be deployed/configured before products go on sale.
+        const PRODUCTS = new Set(['hints-5', 'hints-20', 'theme-gold']);
+        const applyVerifiedPurchase = (productId) => {
+            if (productId === 'hints-5') {
+                playerData.bonusHints = (playerData.bonusHints || 0) + 5; savePlayerData(); updateHintDisplay(); showToast('+5 bonus hints added!', 2500);
+            } else if (productId === 'hints-20') {
+                playerData.bonusHints = (playerData.bonusHints || 0) + 20; savePlayerData(); updateHintDisplay(); showToast('+20 bonus hints added!', 2500);
+            } else if (productId === 'theme-gold') {
+                playerData.settings.boardTheme = 'gold'; savePlayerData(); markGridDirty(); drawGrid(); showToast('Gold theme unlocked!', 2500);
             }
         };
+        const claimPurchase = async (purchase) => {
+            if (!purchase?.purchaseId || !PRODUCTS.has(purchase.productId)) return;
+            const { session } = await V.session();
+            const response = await fetch('/api/vatar/claim', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session, purchaseId: purchase.purchaseId })
+            });
+            if (!response.ok) throw new Error('purchase_verification_failed');
+            const data = await response.json();
+            if (data.delivered && data.grant && data.productId === purchase.productId) applyVerifiedPurchase(data.productId);
+        };
+        window.vatarBuy = async (productId) => {
+            if (!PRODUCTS.has(productId)) return;
+            try { await V.purchase(productId); }
+            catch (err) { vatarError(err); return; }
+            try {
+                const pending = await V.purchases();
+                for (const item of pending) await claimPurchase(item);
+            } catch (err) { vatarError(err); showToast('Purchase awaiting secure delivery. Please reopen the game shortly.', 3500); }
+        };
+        try {
+            const pending = await V.purchases();
+            for (const item of pending) {
+                try { await claimPurchase(item); } catch (err) { console.warn('[Vatar] pending purchase not delivered yet:', err); }
+            }
+        } catch (err) { console.info('[Vatar] purchase restore unavailable:', err?.code || err); }
 
-        console.log('[Vatar] Integration ready ✓');
+        V.onPurchase((purchase) => {
+            claimPurchase(purchase).catch(err => {
+                console.warn('[Vatar] purchase claim failed:', err);
+                showToast('Purchase is paid but still awaiting secure delivery.', 3500);
+            });
+        });
+        V.onPause(() => {
+            vatarPaused = true;
+            if (gameState?.isRunning) gameState._vatarPaused = true;
+            document.body.classList.add('vatar-paused');
+        });
+        V.onResume(() => {
+            vatarPaused = false;
+            document.body.classList.remove('vatar-paused');
+            if (gameState?._vatarPaused) {
+                gameState._vatarPaused = false;
+                // The game loop owns its own timer; do not fabricate a new game state here.
+            }
+        });
+        window.addEventListener('pagehide', () => { stopVatarMoveRelay(); try { unsubscribeMatch?.(); } catch (_) {} }, { once: true });
+        console.log('[Vatar] SDK v1 integration ready. Match stakes disabled until server verification is deployed.');
     })();
 
     // ============================================================

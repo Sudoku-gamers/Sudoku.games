@@ -50,11 +50,10 @@
 
     <!-- Vatar Games SDK — only active when game is loaded inside a Vatar world frame.
          Safe to include always: the SDK is a no-op outside the Vatar environment. -->
-    <script src="https://sdk.vatar.world/vatar-games-v1.js" defer></script>
+    <script src="https://lagoslife.app/sdk/vatar-games-v1.js" defer></script>
 
-    <!-- Allow this page to be embedded inside Vatar's frame origins -->
-    <meta http-equiv="Content-Security-Policy"
-          content="frame-ancestors 'self' https://*.vatar.world https://*.lagoslife.app">
+    <!-- NOTE: frame-ancestors must be sent as an HTTP response header by your host.
+         See LAGOS-LIFE-SETUP.md for the exact Content-Security-Policy header. -->
 </head>
 <body>
     <!-- Animated Splash Screen -->
@@ -223,12 +222,29 @@ create policy "public rw" on sudoku_rooms
                         <button class="action-btn btn-secondary" style="flex:1;" id="create-room-btn">🌐 Create Room</button>
                         <button class="action-btn btn-secondary" style="flex:1;" id="join-room-btn">🔗 Join Code</button>
                     </div>
+                    <div id="vatar-match-panel" style="display:none;flex-direction:column;gap:8px;padding:12px;border:1px solid rgba(213,144,32,.35);border-radius:12px;background:rgba(213,144,32,.06);">
+                        <div style="font-weight:800;color:var(--text-bright);">Lagos Life Match</div>
+                        <div id="vatar-player-status" style="font-size:.82rem;color:var(--text-muted);">Connecting to Lagos Life…</div>
+                        <div style="display:flex;gap:8px;">
+                            <button class="action-btn btn-online" id="vatar-quick-match" style="flex:1;">⚔ Quick Match</button>
+                            <button class="action-btn btn-secondary" id="vatar-create-match" style="flex:1;">＋ Create Match</button>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <input id="vatar-join-code" maxlength="6" placeholder="6-letter code" aria-label="Lagos Life match code" style="min-width:0;flex:1;text-transform:uppercase;letter-spacing:3px;text-align:center;">
+                            <button class="action-btn btn-secondary" id="vatar-join-match">Join</button>
+                        </div>
+                        <div style="font-size:.72rem;color:var(--text-muted);">Friendly matches only until match-result verification is configured and stakes are approved.</div>
+                    </div>
                 </div>
             </div>
 
             <!-- Time Controls -->
             <div class="section-label">Time Control</div>
             <div class="time-grid">
+                <div class="time-card" data-time="60">
+                    <div class="time-main">1+0</div>
+                    <div class="time-label">Sprint</div>
+                </div>
                 <div class="time-card" data-time="120">
                     <div class="time-main">2+0</div>
                     <div class="time-label">Bullet</div>
@@ -262,15 +278,15 @@ create policy "public rw" on sudoku_rooms
                     <div class="mode-card active" data-mode="simultaneous">
                         <div class="mode-icon">⚡</div>
                         <div class="mode-info">
-                            <div class="mode-name">Simultaneous</div>
-                            <div class="mode-desc">Real-time race</div>
+                            <div class="mode-name">Cell Capture</div>
+                            <div class="mode-desc">Race to claim correct cells on one shared board</div>
                         </div>
                     </div>
-                    <div class="mode-card" data-mode="passplay">
-                        <div class="mode-icon">🔄</div>
+                    <div class="mode-card" data-mode="solveoff">
+                        <div class="mode-icon">🏁</div>
                         <div class="mode-info">
-                            <div class="mode-name">Pass & Play</div>
-                            <div class="mode-desc">Turn-based</div>
+                            <div class="mode-name">Competitive Solve-Off</div>
+                            <div class="mode-desc">Separate identical boards · fastest correct solve wins</div>
                         </div>
                     </div>
                 </div>
@@ -309,6 +325,7 @@ create policy "public rw" on sudoku_rooms
             <!-- Action Buttons -->
             <button class="action-btn btn-primary" id="start-game-btn">Create a Game (Local)</button>
             <button class="action-btn btn-secondary" id="solo-sudoku-btn">🧩 Solo Sudoku</button>
+            <button class="action-btn btn-secondary" id="story-mode-btn" style="margin-top:8px;background:linear-gradient(135deg,#202b3b,#172132);border:1px solid rgba(86,211,100,.4);color:#8be69a;">🗺️ Endless Story Mode <span id="story-progress-summary" style="margin-left:auto;font-size:.75rem;opacity:.8;">Level 1</span></button>
 
             <!-- Stats -->
             <div class="stats-bar">
@@ -696,9 +713,10 @@ create policy "public rw" on sudoku_rooms
                 <button class="tool-btn tool-btn-hint" id="hint-btn" title="Hint (reveals one safe cell)">💡<span class="hint-count" id="hint-count">3</span></button>
                 <!-- Vatar: buy hints button — hidden until Vatar SDK is active -->
                 <button class="tool-btn" id="vatar-buy-hints-btn"
-                        title="Buy more hints"
+                        title="Buy 5 more hints"
                         style="display:none;font-size:0.75rem;padding:4px 8px;"
                         onclick="window.vatarBuy && window.vatarBuy('hints-5')">+💡</button>
+                <button class="tool-btn" id="vatar-buy-theme-btn" title="Unlock Gold theme" style="display:none;font-size:0.75rem;padding:4px 8px;" onclick="window.vatarBuy && window.vatarBuy('theme-gold')">✨</button>
                 <button class="tool-btn tool-btn-resign" id="resign-btn" title="Resign">🏳</button>
                 <button class="tool-btn tool-btn-new" id="new-game-btn" title="New Game">↺</button>
             </div>
@@ -1257,6 +1275,22 @@ create policy "public rw" on sudoku_rooms
                 </div>
                 <div id="pp-actions" style="display:flex;gap:8px;margin-top:4px;"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Endless Story Mode map -->
+    <div class="modal-overlay" id="story-map-modal" role="dialog" aria-modal="true" aria-labelledby="story-map-title">
+        <div class="modal-card story-map-card">
+            <button id="story-map-close" aria-label="Close story map" style="align-self:flex-end;margin:12px 14px 0 0;width:34px;height:34px;border:1px solid #344154;border-radius:50%;background:#1b2635;color:#e7edf7;font-size:1.35rem;cursor:pointer;">×</button>
+            <div class="story-map-header">
+                <div class="story-map-kicker">SUDOKU ADVENTURE</div>
+                <h2 id="story-map-title">Endless Story Mode</h2>
+                <p>Clear each puzzle to unlock the next stop. Levels get harder as your journey continues.</p>
+                <div class="story-progress-track"><div id="story-progress-fill"></div></div>
+                <div id="story-progress-label" class="story-progress-label">Level 1 unlocked</div>
+            </div>
+            <div id="story-level-map" class="story-level-map" aria-label="Story levels"></div>
+            <div class="story-map-footer"><span>⭐ Earn stars for each completed level</span><span>♾️ More levels unlock as you play</span></div>
         </div>
     </div>
 
