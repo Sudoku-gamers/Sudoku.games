@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 8123;
-const child = spawn(process.execPath, [path.join(here, 'server.js')], { env: { ...process.env, PORT: String(PORT), VATAR_SECRET: 'vtr_test_UNIT_TEST' }, stdio: 'ignore' });
+const child = spawn(process.execPath, [path.join(here, 'server', 'server.js')], { env: { ...process.env, PORT: String(PORT), VATAR_SECRET: 'vtr_test_UNIT_TEST' }, stdio: 'ignore' });
 await new Promise(r => setTimeout(r, 1200));
 let failed = 0;
 const check = async (route, wantStatus, extra) => {

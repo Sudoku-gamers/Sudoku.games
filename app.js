@@ -1,5 +1,5 @@
         /**
-         * SUDOKU.GAME - Lichess-style Competitive PvP Sudoku
+         * SUDOKU LIFE - Newspaper Sudoku
          */
 
         // ============================================
@@ -5534,9 +5534,9 @@
         function shareResult() {
             const p1 = gameState.scores.p1, p2 = gameState.scores.p2;
             const won = p1 > p2;
-            const txt = `🧩 Sudoku.game — I ${won?'won':'lost'} ${p1}–${p2} in competitive Sudoku! Challenge me: ${window.location.href.split('?')[0]}`;
+            const txt = `🧩 Sudoku Life — I ${won?'won':'lost'} ${p1}–${p2} in competitive Sudoku! Challenge me: ${window.location.href.split('?')[0]}`;
             if (navigator.share) {
-                navigator.share({ title: 'Sudoku.game', text: txt });
+                navigator.share({ title: 'Sudoku Life', text: txt });
             } else {
                 navigator.clipboard.writeText(txt).then(() => {
                     const btn = document.getElementById('share-result-btn');
@@ -5700,9 +5700,7 @@
                     onAuthSignOut();
                     // Show sign-in prompt on first visit (only on SIGNED_OUT, not INITIAL_SESSION with no user)
                     if (event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') {
-                        if (!localStorage.getItem('sudoku_auth_skipped')) {
-                            setTimeout(() => openAuthModal(), 1400);
-                        }
+                        /* Parent Lagos Life owns player identity; do not prompt for standalone sign-in. */
                     }
                 }
             });
@@ -5770,6 +5768,9 @@
         }
 
         function openAuthModal() {
+            // Sudoku Life receives player identity from the parent Lagos Life experience.
+            // Standalone Sudoku.game authentication is intentionally disabled.
+            return;
             document.getElementById('auth-modal').classList.add('active');
             authMode = 'signin';
             document.getElementById('auth-title').textContent = 'Welcome back';

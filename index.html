@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Sudoku.game — Competitive PvP Sudoku</title>
+    <title>Sudoku Life — Newspaper Sudoku</title>
 
     <!-- PWA -->
     <link rel="manifest" href="manifest.json">
@@ -22,7 +22,7 @@
 
     <!-- SEO -->
     <meta name="description" content="Lichess-style competitive Sudoku — race a friend or AI to claim the most cells. Online multiplayer, offline play, PWA.">
-    <meta property="og:title" content="Sudoku.game — Competitive PvP Sudoku">
+    <meta property="og:title" content="Sudoku Life — Newspaper Sudoku">
     <meta property="og:description" content="Race a friend or AI to solve a Sudoku. Claim cells, score points, win.">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary">
@@ -77,8 +77,8 @@
             <ellipse cx="60" cy="134" rx="20" ry="6" fill="#b08010" opacity="0.8"/>
             <ellipse cx="60" cy="132" rx="18" ry="4" fill="#161512" opacity="0.7"/>
         </svg>
-        <div class="splash-title">Sudoku.game</div>
-        <div class="splash-sub">Competitive PvP Sudoku</div>
+        <div class="splash-title">Sudoku Life</div>
+        <div class="splash-sub">A Lagos Life Puzzle Experience</div>
     </div>
     <script>
       // Fail-safe: never leave the animated splash covering the app forever
@@ -106,7 +106,7 @@
                     <div class="side-menu-rating" id="menu-rating">Rating: 2.0</div>
                 </div>
             </div>
-            <button class="auth-sign-in-btn" id="side-auth-btn">Sign In</button>
+            <button class="auth-sign-in-btn" id="side-auth-btn" aria-hidden="true" tabindex="-1">Sign In</button>
         </div>
         <nav class="side-menu-nav">
             <button class="side-menu-item active" data-page="lobby">
@@ -126,7 +126,7 @@
                 <span class="side-menu-icon">🏆</span>
                 <span>Leaderboard</span>
             </button>
-            <button class="side-menu-item" data-page="tournaments">
+            <button class="side-menu-item" data-page="tournaments" aria-hidden="true" tabindex="-1">
                 <span class="side-menu-icon">⚔️</span>
                 <span>Tournaments</span>
                 <span class="friends-badge" id="tournaments-badge" style="display:none;">0</span>
@@ -158,7 +158,7 @@
                     <span></span>
                     <span></span>
                 </button>
-                <span class="logo">Sudoku.game</span>
+                <span class="logo">Sudoku Life</span>
             </div>
             <div class="header-right">
                 <!-- Daily streak badge -->
@@ -312,7 +312,7 @@ create policy "public rw" on sudoku_rooms
             <!-- AI Toggle -->
             <div class="mode-section">
                 <div class="section-label">Options</div>
-                <div class="mode-card" id="ai-toggle-card" style="width: 100%;">
+                <div class="mode-card" id="ai-toggle-card" style="width: 100%;" aria-hidden="true">
                     <div class="mode-icon">🤖</div>
                     <div class="mode-info">
                         <div class="mode-name">Play vs Computer</div>
@@ -322,7 +322,7 @@ create policy "public rw" on sudoku_rooms
             </div>
 
             <!-- Action Buttons -->
-            <button class="action-btn btn-primary" id="start-game-btn">Create a Game (Local)</button>
+            <button class="action-btn btn-primary" id="start-game-btn" aria-hidden="true" tabindex="-1">Create a Game (Local)</button>
             <button class="action-btn btn-secondary" id="solo-sudoku-btn">🧩 Solo Sudoku</button>
             <button class="action-btn btn-secondary" id="story-mode-btn" style="margin-top:8px;background:linear-gradient(135deg,#202b3b,#172132);border:1px solid rgba(86,211,100,.4);color:#8be69a;">🗺️ Endless Story Mode <span id="story-progress-summary" style="margin-left:auto;font-size:.75rem;opacity:.8;">Level 1</span></button>
 
@@ -651,7 +651,7 @@ create policy "public rw" on sudoku_rooms
                     <span></span>
                     <span></span>
                 </button>
-                <span class="logo">Sudoku.game</span>
+                <span class="logo">Sudoku Life</span>
             </div>
             <div class="header-right">
                 <div class="ai-indicator" id="ai-indicator">
@@ -880,7 +880,7 @@ create policy "public rw" on sudoku_rooms
 
     <!-- How to Play Modal -->
     <div class="modal-overlay" id="how-to-play-modal">
-        <div class="modal" style="max-width:400px;">
+        <div class="modal how-to-newspaper-modal" style="max-width:460px;">
             <div class="modal-header">
                 <div class="modal-icon">🧩</div>
                 <div class="modal-title">How to Play</div>
@@ -891,22 +891,22 @@ create policy "public rw" on sudoku_rooms
                     <div style="display:flex;gap:14px;align-items:flex-start;">
                         <div style="width:36px;height:36px;background:rgba(74,158,255,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🎯</div>
                         <div>
-                            <div style="font-weight:700;color:#fff;margin-bottom:4px;">Claim Cells to Score</div>
-                            <div style="font-size:0.82rem;color:#8080a0;line-height:1.5;">Fill in the correct number in any empty cell to <span style="color:#4a9eff;">claim it for yourself</span>. Your opponent races to do the same. Most cells at the end wins!</div>
+                            <div style="font-weight:700;color:#30251c;margin-bottom:4px;">Claim Cells to Score</div>
+                            <div style="font-size:0.82rem;color:#604b36;line-height:1.6;">Fill in the correct number in any empty cell to <span style="color:#4a9eff;">claim it for yourself</span>. Your opponent races to do the same. Most cells at the end wins!</div>
                         </div>
                     </div>
                     <div style="display:flex;gap:14px;align-items:flex-start;">
                         <div style="width:36px;height:36px;background:rgba(240,90,90,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">⚠️</div>
                         <div>
-                            <div style="font-weight:700;color:#fff;margin-bottom:4px;">Wrong Moves Cost You</div>
-                            <div style="font-size:0.82rem;color:#8080a0;line-height:1.5;">Enter a wrong number and lose <strong style="color:#f05a5a;">10 seconds</strong> off your clock. Make 3 wrong moves in a row and you lose a point too. Watch the error counter: ○○○</div>
+                            <div style="font-weight:700;color:#30251c;margin-bottom:4px;">Wrong Moves Cost You</div>
+                            <div style="font-size:0.82rem;color:#604b36;line-height:1.6;">Enter a wrong number and lose <strong style="color:#8b3026;">10 seconds</strong> off your clock. Make 3 wrong moves in a row and you lose a point too. Watch the error counter: ○○○</div>
                         </div>
                     </div>
                     <div style="display:flex;gap:14px;align-items:flex-start;">
                         <div style="width:36px;height:36px;background:rgba(86,211,153,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">⏱️</div>
                         <div>
-                            <div style="font-weight:700;color:#fff;margin-bottom:4px;">Standard Sudoku Rules</div>
-                            <div style="font-size:0.82rem;color:#8080a0;line-height:1.5;">Each row, column, and 3×3 box must contain the numbers 1–9 exactly once. Use <strong style="color:#769656;">Pencil mode</strong> to jot candidate numbers, and keyboard keys 1–9 + arrows for fast play.</div>
+                            <div style="font-weight:700;color:#30251c;margin-bottom:4px;">Standard Sudoku Rules</div>
+                            <div style="font-size:0.82rem;color:#604b36;line-height:1.6;">Each row, column, and 3×3 box must contain the numbers 1–9 exactly once. Use <strong style="color:#405b35;">Pencil mode</strong> to jot candidate numbers, and keyboard keys 1–9 + arrows for fast play.</div>
                         </div>
                     </div>
                 </div>
@@ -1020,7 +1020,7 @@ create policy "public rw" on sudoku_rooms
                         <circle cx="40" cy="40" r="3" fill="#161512"/>
                     </svg>
                 </div>
-                <div class="modal-title" id="auth-title">Welcome to Sudoku.game</div>
+                <div class="modal-title" id="auth-title">Welcome to Sudoku Life</div>
                 <div class="modal-subtitle" id="auth-subtitle">Sign in to save your rating across devices</div>
             </div>
             <div class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:12px;">
