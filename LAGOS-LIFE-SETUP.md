@@ -46,6 +46,13 @@ The Lagos Life match panel lets players choose Cell Capture or Competitive Solve
 
 
 ## Sudoku hint and continue products
-- Each solo/story puzzle starts with **2 free hints**. Configure Lagos Life product `hints-5` at **₦100** to sell five additional hints.
-- After the fourth incorrect entry in solo/story mode, the puzzle ends. The result screen offers `continue-solo` for **₦100**; successful verified delivery resets the mistake counter and resumes the same board.
-- Configure both product IDs and prices in the Lagos Life developer dashboard. The app code cannot set or verify dashboard prices; do not publish paid products until the dashboard prices, sandbox purchase callbacks, refunds, and delivery have been tested.
+
+**Required dashboard setup — the client code cannot create or publish store products.** The screenshots showing `not_for_sale` mean the SDK received the request but the product is not enabled for sale in the Lagos Life developer dashboard. This cannot be fixed by changing client code; enable the exact product under the correct game draft. The build now hides the optional `theme-gold` purchase button and accepts only the two intended products (`hints-5`, `continue-solo`) so it does not send accidental requests for unconfigured extras.
+
+Create/enable these exact product IDs under this game's draft, and set the listed sandbox/production prices as appropriate:
+- `hints-5` — **₦100**, grants five additional hints.
+- `continue-solo` — **₦100**, lets a player continue the same Solo/Story puzzle after the fourth mistake.
+
+Optional products `hints-20` and `theme-gold` are disabled and excluded from the purchase allowlist in this build. Do not expose or enable them unless their grant logic, dashboard products, and server allowlist are deliberately reintroduced together.
+
+Each solo/story puzzle starts with **2 free hints**. After the fourth incorrect entry, the puzzle ends and offers `continue-solo`. Only a verified and delivered purchase should grant the benefit. Once products are enabled, make a sandbox purchase of each product and confirm the dashboard checklist records purchase, server verification and delivery before publishing them.

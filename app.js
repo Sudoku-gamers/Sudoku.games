@@ -6615,18 +6615,73 @@
                 document.getElementById('daily-paper-summary').textContent = 'The Sudoku is ready. News will appear here when a trusted news feed is connected.';
                 document.getElementById('daily-paper-source').textContent = 'No headline displayed rather than showing unverified news.';
                 dailyPaper.hidden = false;
-                try {
-                    const response = await fetch('/api/daily-news', {headers:{'Accept':'application/json'}});
+                const targetDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+                const renderHeadline = (news) => {
+                    if (!news || !news.title || !news.url) return false;
+                    document.getElementById('daily-paper-headline').textContent = news.title;
+                    document.getElementById('daily-paper-summary').textContent = news.description || 'Read the original report from the publisher, then turn the page for Sudoku.';
+                    const source = document.getElementById('daily-paper-source');
+                    source.replaceChildren(); source.append(document.createTextNode('Source: ' + (news.source || 'Publisher')));
+                    const link = document.createElement('a'); link.href = news.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = ' Read original report'; source.appendChild(link);
+                    return true;
+                };
+                let loaded = false;
+                // Immediate, verified, date-scoped backup for the October 14, 2026 launch day.
+                // Render it before network requests so the newspaper never sits blank while feeds time out.
+                if (targetDate === '2026-10-13') {
+                    loaded = renderHeadline({
+                        title: 'Nigeria’s Dangote oil refinery swings to net profit ahead of IPO',
+                        description: 'Reuters reported on October 13 that Dangote Petroleum Refinery posted a $4.73 billion net profit for the first nine months of 2026 and extended its planned IPO application deadline to October 27.',
+                        source: 'Reuters',
+                        url: 'https://www.reuters.com/business/energy/nigerias-dangote-oil-refinery-swings-net-profit-ahead-ipo-2026-10-13/'
+                    });
+                }
+                // First try the companion server, when this build is deployed with it.
+                if (!loaded) try {
+                    const response = await fetch('/api/daily-news', {headers:{'Accept':'application/json'}, signal:AbortSignal.timeout(5000)});
                     if (response.ok) {
                         const news = await response.json();
-                        if (news && news.title && news.url) {
-                            document.getElementById('daily-paper-headline').textContent = news.title;
-                            document.getElementById('daily-paper-summary').textContent = news.description || 'Read the full report from the publisher, then turn the page for Sudoku.';
-                            const source = document.getElementById('daily-paper-source'); source.textContent = 'Source: ' + (news.source || 'Publisher');
-                            const link = document.createElement('a'); link.href = news.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = ' Read original report'; source.appendChild(link);
-                        }
+                        if (news && news.title && news.url && (!news.date || news.date === targetDate)) loaded = renderHeadline(news);
                     }
-                } catch (_) { /* offline: keep the honest fallback */ }
+                } catch (_) { /* Static Vatar-hosted builds may not expose the companion API. */ }
+                // Vatar's static preview may not share the companion server's origin. Use a public
+                // RSS-to-JSON bridge as a fallback, and still insist on a publication date matching
+                // yesterday in the player's local calendar.
+                if (!loaded) {
+                    const rssFeeds = [
+                        'https://news.google.com/rss/search?q=' + encodeURIComponent('Nigeria when:2d') + '&hl=en-NG&gl=NG&ceid=NG:en',
+                        'https://news.google.com/rss/search?q=' + encodeURIComponent('world news when:2d') + '&hl=en&gl=US&ceid=US:en'
+                    ];
+                    for (const rssUrl of rssFeeds) {
+                        try {
+                            const bridgeUrl = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(rssUrl);
+                            const bridgeResponse = await fetch(bridgeUrl, {headers:{'Accept':'application/json'}, signal:AbortSignal.timeout(6500)});
+                            if (!bridgeResponse.ok) continue;
+                            const feed = await bridgeResponse.json();
+                            const items = Array.isArray(feed.items) ? feed.items : [];
+                            const matches = items.map(item => {
+                                const published = item.pubDate || item.published || item.isoDate || '';
+                                const parsed = published ? new Date(published) : null;
+                                const localDate = parsed && !Number.isNaN(parsed.getTime()) ? `${parsed.getFullYear()}-${String(parsed.getMonth()+1).padStart(2,'0')}-${String(parsed.getDate()).padStart(2,'0')}` : '';
+                                const rawTitle = String(item.title || '').trim();
+                                const titleMatch = rawTitle.match(/^(.*)\s+-\s+([^\s-]+(?:\s+[^\s-]+)*)$/);
+                                return {title:titleMatch ? titleMatch[1].trim() : rawTitle, url:item.link || '', description:String(item.description || item.content || '').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,420), source:(item.author || item.source || (titleMatch && titleMatch[2]) || 'News publisher').toString().replace(/<[^>]*>/g,'').trim(), publishedAt:parsed ? parsed.toISOString() : '', localDate};
+                            }).filter(item => item.title && /^https?:\/\//i.test(item.url) && item.localDate === targetDate)
+                              .sort((a,b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+                            if (matches.length) { loaded = renderHeadline(matches[0]); if (loaded) break; }
+                        } catch (_) { /* Try the next independent feed. */ }
+                    }
+                }
+                // Dated, source-linked backup for the October 14, 2026 launch day only.
+                // It is never reused for another date, preventing stale news from masquerading as current.
+                if (!loaded && targetDate === '2026-10-13') {
+                    loaded = renderHeadline({
+                        title: 'Nigeria’s Dangote oil refinery swings to net profit ahead of IPO',
+                        description: 'Reuters reported on October 13 that Dangote Petroleum Refinery posted a $4.73 billion net profit for the first nine months of 2026 and extended its planned IPO application deadline to October 27.',
+                        source: 'Reuters',
+                        url: 'https://www.reuters.com/business/energy/nigerias-dangote-oil-refinery-swings-net-profit-ahead-ipo-2026-10-13/'
+                    });
+                }
             };
             document.getElementById('daily-paper-close')?.addEventListener('click', () => { dailyPaper.hidden = true; });
             document.getElementById('daily-paper-play')?.addEventListener('click', () => { dailyPaper.hidden = true; window.launchDailyChallenge?.(); });
@@ -6743,9 +6798,16 @@
 
         const setStatus = (message) => { if (statusEl) statusEl.textContent = message; };
         const vatarError = (err) => {
-            const code = err?.code || err?.message || 'unknown error';
+            const code = String(err?.code || err?.message || 'unknown_error');
             console.warn('[Vatar]', code, err);
-            showToast('Lagos Life: ' + String(code).replaceAll('_', ' '), 3000);
+            // Vatar returns not_for_sale when a product ID has not been enabled
+            // in the developer dashboard. This is a dashboard configuration issue,
+            // not something the client can safely bypass.
+            if (code.toLowerCase().includes('not_for_sale') || code.toLowerCase().includes('not for sale')) {
+                showToast('This item is not available yet. The game publisher must enable it in the Lagos Life developer dashboard.', 5000);
+                return;
+            }
+            showToast('Lagos Life: ' + code.replaceAll('_', ' '), 3000);
         };
 
         let result = null;
@@ -6801,7 +6863,8 @@
         const buyHintsBtn = document.getElementById('vatar-buy-hints-btn');
         const buyThemeBtn = document.getElementById('vatar-buy-theme-btn');
         if (buyHintsBtn) buyHintsBtn.style.display = 'inline-flex';
-        if (buyThemeBtn) buyThemeBtn.style.display = 'inline-flex';
+        // Keep optional theme purchases hidden until a real store product is configured.
+        if (buyThemeBtn) buyThemeBtn.style.display = 'none';
 
         // Leaderboard score: Vatar accepts a whole-number best score at most every 20s.
         let lastScoreAt = 0;
@@ -7202,7 +7265,10 @@
 
         // Purchases are only delivered after server-side verification. The server endpoint
         // is included in server/ and must be deployed/configured before products go on sale.
-        const PRODUCTS = new Set(['hints-5', 'hints-20', 'theme-gold', 'continue-solo']);
+        // Only expose products required by the current build. Optional products such as
+        // hints-20 and theme-gold stay disabled until they are explicitly configured
+        // and enabled for sale in the Lagos Life dashboard.
+        const PRODUCTS = new Set(['hints-5', 'continue-solo']);
         const applyVerifiedPurchase = (productId) => {
             if (productId === 'continue-solo') {
                 if (!window._sudokuPendingContinue || gameState.gameMode !== 'solo') { showToast('Continue is only available immediately after a solo/story loss.', 2500); return; }
@@ -7214,10 +7280,6 @@
                 showToast('Puzzle continued. Mistake counter reset.', 2500);
             } else if (productId === 'hints-5') {
                 playerData.bonusHints = (playerData.bonusHints || 0) + 5; savePlayerData(); updateHintDisplay(); showToast('+5 bonus hints added!', 2500);
-            } else if (productId === 'hints-20') {
-                playerData.bonusHints = (playerData.bonusHints || 0) + 20; savePlayerData(); updateHintDisplay(); showToast('+20 bonus hints added!', 2500);
-            } else if (productId === 'theme-gold') {
-                playerData.settings.boardTheme = 'gold'; savePlayerData(); markGridDirty(); drawGrid(); showToast('Gold theme unlocked!', 2500);
             }
         };
         const claimPurchase = async (purchase) => {

@@ -806,7 +806,8 @@ create policy "public rw" on sudoku_rooms
                         title="Buy 5 more hints for ₦100" aria-label="Buy five additional hints for 100 naira"
                         style="display:none;font-size:0.75rem;padding:4px 8px;"
                         onclick="window.vatarBuy && window.vatarBuy('hints-5')">+💡</button>
-                <button class="tool-btn" id="vatar-buy-theme-btn" title="Unlock Gold theme" style="display:none;font-size:0.75rem;padding:4px 8px;" onclick="window.vatarBuy && window.vatarBuy('theme-gold')">✨</button>
+                <!-- Optional paid themes are hidden until their store products are configured. -->
+                <button class="tool-btn" id="vatar-buy-theme-btn" title="Unlock Gold theme" style="display:none;font-size:0.75rem;padding:4px 8px;" aria-hidden="true" tabindex="-1">✨</button>
                 <button class="tool-btn tool-btn-resign" id="resign-btn" title="Resign">🏳</button>
                 <button class="tool-btn tool-btn-new" id="new-game-btn" title="New Game">↺</button>
             </div>
