@@ -3141,7 +3141,7 @@
                             submit('mistake_limit').then(result => {
                                 if (!result || !result.success) {
                                     console.error('[Vatar] result submission failed:', result);
-                                    showToast('Five mistakes reached, but Lagos Life could not confirm the result. Check the companion server configuration.', 5000);
+                                    showToast(window.sudokuVatarForfeitMessage ? window.sudokuVatarForfeitMessage(result) : 'Five mistakes reached, but the result was not recorded.', 7000);
                                 }
                                 endGame(localWinner, 'multiplayer_mistake_limit');
                             }).catch(err => {
@@ -3174,7 +3174,7 @@
                             submit('mistake_limit').then(result => {
                                 if (!result || !result.success) {
                                     console.error('[Vatar] result submission failed:', result);
-                                    showToast('Five mistakes reached, but Lagos Life could not confirm the result. Check the companion server configuration.', 5000);
+                                    showToast(window.sudokuVatarForfeitMessage ? window.sudokuVatarForfeitMessage(result) : 'Five mistakes reached, but the result was not recorded.', 7000);
                                 }
                                 endGame(localWinner, 'multiplayer_mistake_limit');
                             }).catch(err => {
@@ -7051,7 +7051,7 @@
                     const gameModeLabel = document.getElementById('game-mode-label');
                     if (gameModeLabel) gameModeLabel.textContent = gameState.gameMode === 'solveoff' ? 'Competitive Solve-Off' : 'Cell Capture';
                     startVatarMoveRelay(match.id);
-                    showToast('Lagos Life match started. Friendly match only; server-side result settlement is not enabled.', 3500);
+                    showToast('Lagos Life match started. Friendly match: no stakes.', 3000);
                 } finally { Math.random = originalRandom; }
             } else if (match.status === 'done') {
                 stopVatarMoveRelay();
@@ -7145,22 +7145,64 @@
                 await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session, matchId, type: 'solved' }) });
             } catch (err) { console.warn('[Vatar] solve result relay failed:', err); }
         };
-        window.sudokuSubmitVatarForfeit = async (reason = 'mistake_limit') => {
-            const matchId = activeVatarMatch?.id || vatarRelayMatchId;
-            if (!matchId || !vatarPlayer?.id) return { success: false, error: 'no_active_vatar_match' };
+        // One forfeit request with a hard timeout, so a sleeping or unreachable server can never leave
+        // the game stuck on "Recording the match result…". Always resolves to { success, status?, error?, ... }.
+        const postVatarForfeit = async (payload) => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 25000);
             try {
-                const { session } = await V.session();
                 const response = await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/match/forfeit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session, matchId, defeatedPlayerId: vatarPlayer.id, reason })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: payload, signal: controller.signal
                 });
                 const data = await response.json().catch(() => ({}));
                 return response.ok && data.success === true ? data : { success: false, status: response.status, ...data };
             } catch (err) {
-                console.warn('[Vatar] forfeit result submission failed:', err);
-                return { success: false, error: err?.message || 'network_error' };
+                console.warn('[Vatar] forfeit request failed:', err);
+                return { success: false, status: 0, error: err?.name === 'AbortError' ? 'timeout' : 'network_error' };
+            } finally { clearTimeout(timer); }
+        };
+        // Only "could not reach it" outcomes are retried (for example a Render instance that is still waking up).
+        // The retry is safe: the server picks the winner itself, and Lagos Life answers a repeated identical result as a replay.
+        const forfeitIsRetryable = (r) => !r.success && (r.status === 0 || r.status === 503 || r.status === 504 ||
+            (r.status === 502 && (!r.error || r.error === 'lagos_life_unreachable')));
+        window.sudokuSubmitVatarForfeit = async (reason = 'mistake_limit') => {
+            const matchId = activeVatarMatch?.id || vatarRelayMatchId;
+            if (!matchId || !vatarPlayer?.id) return { success: false, error: 'no_active_vatar_match' };
+            let session;
+            try { ({ session } = await V.session()); }
+            catch (err) { return { success: false, error: err?.code || 'session_unavailable' }; }
+            const payload = JSON.stringify({ session, matchId, defeatedPlayerId: vatarPlayer.id, reason });
+            let result = await postVatarForfeit(payload);
+            if (forfeitIsRetryable(result)) {
+                await new Promise(resolve => setTimeout(resolve, 2500));
+                result = await postVatarForfeit(payload);
             }
+            return result;
+        };
+        // Player-facing explanation of a failed submission. The code in brackets is what to read out when debugging.
+        window.sudokuVatarForfeitMessage = (result) => {
+            const code = result?.error || '';
+            const reasons = {
+                no_active_vatar_match: 'No active Lagos Life match was found on this device.',
+                session_unavailable: 'Your Lagos Life session could not be read.',
+                timeout: 'The game server did not answer in time.',
+                network_error: 'The game server could not be reached.',
+                lagos_life_unreachable: 'Lagos Life did not answer.',
+                invalid_session: 'Lagos Life did not accept your session.',
+                not_active_two_player_match: 'Lagos Life does not show this match as in progress.',
+                match_not_playing: 'Lagos Life does not show this match as in progress.',
+                already_settled: 'This match was already settled.',
+                result_signing_rejected: 'Lagos Life rejected the signed result.',
+                match_result_not_verifiable: 'The match details needed to sign the result were missing.',
+                server_not_configured: 'The game server is missing its Lagos Life credentials.'
+            };
+            const why = reasons[code] || (result?.status === 404
+                ? 'The game server does not have the result route (outdated deployment).'
+                : 'The result was not recorded.');
+            const upstream = result?.upstream?.error ? ' · Lagos Life: ' + result.upstream.error : '';
+            const detail = [result?.status ? 'HTTP ' + result.status : '', code || 'unknown'].filter(Boolean).join(' ');
+            return 'Five mistakes reached. ' + why + ' [' + detail + upstream + ']';
         };
 
         const vatarEndGameBase = endGame;

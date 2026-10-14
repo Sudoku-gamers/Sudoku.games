@@ -19,7 +19,8 @@ Render runs your game and its server together on one HTTPS address, which Lagos 
 4. Deploy. Wait until it says Live. You get an address like https://sudoku-games-xxxx.onrender.com
 
 ## Step 3: Check it works
-1. Open YOUR-ADDRESS/healthz. You should see {"ok":true,"service":"sudoku-vatar"}.
+1. Open YOUR-ADDRESS/healthz. You should see something like {"ok":true,"service":"sudoku-vatar","build":"forfeit-fix-2026-10-14","forfeitRoute":true,"resultsConfigured":true}.
+   `build` tells you which code Render is really running, and `resultsConfigured` must be true (it only says whether both Vatar secrets are set, never their values). If `build` is missing, Render is running old code: redeploy it.
 2. Open YOUR-ADDRESS/server/.env. It must say not_found. If it shows anything else, stop and tell me.
 
 ## Step 4: Point Lagos Life at it
