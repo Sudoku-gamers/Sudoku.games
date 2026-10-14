@@ -2143,7 +2143,7 @@
             gameState.animatingCells.clear();
             gameState.lastTick = Date.now();
             gameState.wrongMoves = 0;
-            gameState.maxWrongMoves = 4;
+            gameState.maxWrongMoves = (gameState.gameMode === 'solo') ? 4 : 5;
             window._sudokuLastWrongAttempt = null;
             gameState.hintsUsed  = 0;
             gameState.errorCell  = null;
@@ -3113,7 +3113,7 @@
                     _attemptNow - window._sudokuLastWrongAttempt.time < 700) return;
                 window._sudokuLastWrongAttempt = { row, col, number, time: _attemptNow };
                 gameState.wrongMoves = Math.max(0, Number(gameState.wrongMoves) || 0);
-                gameState.maxWrongMoves = 4;
+                gameState.maxWrongMoves = (gameState.gameMode === 'solo') ? 4 : 5;
                 gameState.wrongMoves++;
                 gameState.totalWrongMoves++;
                 gameState.errorCell = { row, col, startTime: Date.now() };
@@ -3128,7 +3128,31 @@
                         endGame(2, 'mistake_limit');
                     }
                 } else if (gameState.gameMode === 'solveoff') {
-                    showToast('Incorrect number — try again. Your clock keeps running.', 1800);
+                    const remaining = Math.max(0, gameState.maxWrongMoves - gameState.wrongMoves);
+                    if (remaining > 0) {
+                        showToast(`Incorrect number — ${remaining} mistake${remaining === 1 ? '' : 's'} remaining. Your clock keeps running.`, 1800);
+                    }
+                    if (gameState.wrongMoves >= gameState.maxWrongMoves) {
+                        gameState.isRunning = false;
+                        const localWinner = gameState.vatarSlot === 1 ? 2 : 1;
+                        const submit = window.sudokuSubmitVatarForfeit;
+                        if (typeof submit === 'function' && window.Vatar) {
+                            showToast('Five mistakes reached. Recording the match result…', 2500);
+                            submit('mistake_limit').then(result => {
+                                if (!result || !result.success) {
+                                    console.error('[Vatar] result submission failed:', result);
+                                    showToast('Five mistakes reached, but Lagos Life could not confirm the result. Check the companion server configuration.', 5000);
+                                }
+                                endGame(localWinner, 'multiplayer_mistake_limit');
+                            }).catch(err => {
+                                console.error('[Vatar] forfeit submission failed:', err);
+                                showToast('Five mistakes reached, but result delivery failed. Check the connection.', 4000);
+                                endGame(localWinner, 'multiplayer_mistake_limit');
+                            });
+                        } else {
+                            endGame(localWinner, 'multiplayer_mistake_limit');
+                        }
+                    }
                 } else {
                     const PENALTY_SECONDS = 10;
                     if (gameState.gameMode === 'simultaneous' || gameState.gameMode === 'pvp') {
@@ -3140,6 +3164,28 @@
                         gameState[activeTimer] = Math.max(0, gameState[activeTimer] - PENALTY_SECONDS);
                     }
                     showPenaltyToast(PENALTY_SECONDS);
+                    if ((gameState.gameMode === 'simultaneous' || gameState.gameMode === 'pvp') &&
+                        !gameState.vsAI && gameState.wrongMoves >= gameState.maxWrongMoves) {
+                        gameState.isRunning = false;
+                        const localWinner = gameState.vatarSlot === 1 ? 2 : 1;
+                        const submit = window.sudokuSubmitVatarForfeit;
+                        if (typeof submit === 'function' && window.Vatar) {
+                            showToast('Five mistakes reached. Recording the match result…', 2500);
+                            submit('mistake_limit').then(result => {
+                                if (!result || !result.success) {
+                                    console.error('[Vatar] result submission failed:', result);
+                                    showToast('Five mistakes reached, but Lagos Life could not confirm the result. Check the companion server configuration.', 5000);
+                                }
+                                endGame(localWinner, 'multiplayer_mistake_limit');
+                            }).catch(err => {
+                                console.error('[Vatar] forfeit submission failed:', err);
+                                showToast('Five mistakes reached, but result delivery failed. Check the connection.', 4000);
+                                endGame(localWinner, 'multiplayer_mistake_limit');
+                            });
+                        } else {
+                            endGame(localWinner, 'multiplayer_mistake_limit');
+                        }
+                    }
                 }
                 setTimeout(() => { gameState.errorCell = null; markGridDirty(); drawGrid(); }, 600);
                 return;
@@ -7099,6 +7145,24 @@
                 await fetch('/api/vatar/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session, matchId, type: 'solved' }) });
             } catch (err) { console.warn('[Vatar] solve result relay failed:', err); }
         };
+        window.sudokuSubmitVatarForfeit = async (reason = 'mistake_limit') => {
+            const matchId = activeVatarMatch?.id || vatarRelayMatchId;
+            if (!matchId || !vatarPlayer?.id) return { success: false, error: 'no_active_vatar_match' };
+            try {
+                const { session } = await V.session();
+                const response = await fetch('/api/vatar/match/forfeit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session, matchId, defeatedPlayerId: vatarPlayer.id, reason })
+                });
+                const data = await response.json().catch(() => ({}));
+                return response.ok && data.success === true ? data : { success: false, status: response.status, ...data };
+            } catch (err) {
+                console.warn('[Vatar] forfeit result submission failed:', err);
+                return { success: false, error: err?.message || 'network_error' };
+            }
+        };
+
         const vatarEndGameBase = endGame;
         endGame = function(winner, reason) {
             if (gameState.gameMode === 'solveoff' && winner === 1 && reason === 'solved') postVatarSolved();

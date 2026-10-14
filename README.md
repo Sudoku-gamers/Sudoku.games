@@ -24,7 +24,7 @@ The server serves the app with the required `frame-ancestors` CSP header, verifi
 
 ## Important production limitation
 
-Lagos Life matches are created with `stake: 0`. The companion server's match configuration and move relay are in-memory and intended for a single test instance. Competitive Solve-Off's completion event is a friendly-mode notification, not an authoritative server-verified Sudoku result. **Do not enable stakes or advertise staked play.** Before launch with stakes, move puzzle generation and Sudoku validation server-side, use durable transactional storage, and implement/test the official signed result endpoint with `VATAR_RESULTS_SECRET` and the exact documented HMAC-SHA256 signing rules. Obtain platform approval first.
+Lagos Life matches are created with `stake: 0`. The companion server's match configuration and move relay are in-memory and intended for a single test instance. Competitive Solve-Off's solved event is a friendly-mode notification, not an authoritative server-verified Sudoku result. A five-mistake forfeit can submit a signed winner result only when the companion server has both Vatar secrets configured; this does not make puzzle solving authoritative. **Do not enable stakes or advertise staked play.** Before launch with stakes, move puzzle generation and Sudoku validation server-side, use durable transactional storage, and implement/test the official signed result endpoint with `VATAR_RESULTS_SECRET` and the exact documented HMAC-SHA256 signing rules. Obtain platform approval first.
 
 
 ## Startup spinner / service-worker loop fix
