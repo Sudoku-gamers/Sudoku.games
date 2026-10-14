@@ -30,6 +30,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API = 'https://lagoslife.app/api/games/v1';
 const SECRET = process.env.VATAR_SECRET;
 const RESULTS_SECRET = process.env.VATAR_RESULTS_SECRET;
+const WEBHOOK_SECRET = process.env.VATAR_WEBHOOK_SECRET;
 const PORT = Number(process.env.PORT || 8080);
 const DB_PATH = process.env.VATAR_STORE_PATH || path.join(path.dirname(fileURLToPath(import.meta.url)), 'vatar-store.json');
 // Least-privilege allowlist: only products enabled for this build.
@@ -44,6 +45,7 @@ const MAX_BODY = 64 * 1024;
 
 if (!SECRET) console.warn('[Vatar] VATAR_SECRET is not set. Purchase verification will return 503.');
 if (!RESULTS_SECRET) console.warn('[Vatar] VATAR_RESULTS_SECRET is not set. Match result submission will fail.');
+if (!WEBHOOK_SECRET) console.warn('[Vatar] VATAR_WEBHOOK_SECRET is not set. Webhook signature verification will return 503.');
 
 async function readStore() {
   try { return JSON.parse(await fs.readFile(DB_PATH, 'utf8')); }
@@ -54,6 +56,25 @@ async function writeStore(store) {
   await fs.writeFile(temp, JSON.stringify(store, null, 2), { mode: 0o600 });
   await fs.rename(temp, DB_PATH);
 }
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = []; let size = 0;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > MAX_BODY) { reject(Object.assign(new Error('body_too_large'), { status: 413 })); req.destroy(); return; }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+function validWebhookSignature(raw, header) {
+  if (!WEBHOOK_SECRET || typeof header !== 'string') return false;
+  const expected = Buffer.from('sha256=' + crypto.createHmac('sha256', WEBHOOK_SECRET).update(raw).digest('hex'));
+  const received = Buffer.from(header);
+  return expected.length === received.length && crypto.timingSafeEqual(expected, received);
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = []; let size = 0;
@@ -171,6 +192,28 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     
+    // Lagos Life/Vatar signed webhook receiver. Notifications are diagnostic only;
+    // match results must still be submitted through the signed result API.
+    if (url.pathname === '/vatar-webhook' && req.method === 'POST') {
+      if (!WEBHOOK_SECRET) return send(res, 503, { error: 'webhook_not_configured' });
+      const raw = await readRawBody(req);
+      const signature = req.headers['x-vatar-signature'];
+      if (!validWebhookSignature(raw, signature)) {
+        console.warn('[Vatar webhook] rejected: invalid_signature');
+        return send(res, 401, { error: 'invalid_signature' });
+      }
+      let event;
+      try { event = JSON.parse(raw.toString('utf8')); }
+      catch { return send(res, 400, { error: 'invalid_json' }); }
+      const eventType = String(event?.type || req.headers['x-vatar-event'] || 'unknown');
+      const deliveryId = String(event?.id || req.headers['x-vatar-delivery'] || 'unknown');
+      console.log('[Vatar webhook] verified event received:', {
+        type: eventType, deliveryId, mode: event?.mode || null,
+        matchId: event?.data?.matchId || event?.data?.id || null
+      });
+      return send(res, 200, { received: true });
+    }
+
     // Endpoint to handle match completion / mistake limit forfeiture
     if (url.pathname === '/api/vatar/match/forfeit' && req.method === 'POST') {
       console.log('[Vatar] forfeit route reached');
