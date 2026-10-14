@@ -37,4 +37,4 @@ also no longer forces a reload on its first-ever controller takeover.
 
 ## Paid hints and puzzle continuation
 
-The game includes two free hints per Solo/Story puzzle, five extra hints via `hints-5`, and a ₦100 continuation via `continue-solo` after four mistakes. **Create and enable `hints-5` and `continue-solo` in the Lagos Life developer dashboard**; code cannot make an unlisted product purchasable. If the SDK reports `not_for_sale`, the game now displays a clearer availability message instead of implying the payment succeeded.
+The game includes two free hints per Solo/Story puzzle, three extra hints via `hints-3`, and a ₦200 continuation via `continue-solo` after four mistakes. **Create and enable `hints-3` and `continue-solo` in the Lagos Life developer dashboard**; code cannot make an unlisted product purchasable. If the SDK reports `not_for_sale`, the game now displays a clearer availability message instead of implying the payment succeeded.

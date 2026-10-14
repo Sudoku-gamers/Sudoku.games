@@ -8,7 +8,7 @@ This branch targets the official Vatar Games SDK v1 documented at https://lagosl
 - Uses documented `window.Vatar` API names: `init`, `session`, `submitScore`, `purchases`, `onPurchase`, `purchase`, `onPause`, `onResume`, and `Vatar.match.create/join/quick/current/onUpdate`.
 - Lagos Life native match controls (quick match, create room, join six-character code), while keeping the existing Supabase/guest flow when the game is opened outside Lagos Life.
 - Only zero-stake matches are requested from the browser. Cell Capture remains the shared-board race; Competitive Solve-Off uses separate local boards with a shared first-writer-wins match configuration (mode, difficulty, variant and 1–20 minute clock).
-- Optional product IDs for the developer dashboard: `hints-5`, `hints-20`, `theme-gold`, `continue-solo`.
+- Required product IDs for the developer dashboard: `hints-3` and `continue-solo`.
 - A Node 18+ companion server that serves the game with the required HTTP `Content-Security-Policy: frame-ancestors ...` response header and verifies purchase ownership with Vatar before marking a purchase delivered.
 
 ## Run locally
@@ -47,11 +47,11 @@ The Lagos Life match panel lets players choose Cell Capture or Competitive Solve
 
 ## Sudoku hint and continue products
 
-**Required dashboard setup — the client code cannot create or publish store products.** The screenshots showing `not_for_sale` mean the SDK received the request but the product is not enabled for sale in the Lagos Life developer dashboard. This cannot be fixed by changing client code; enable the exact product under the correct game draft. The build now hides the optional `theme-gold` purchase button and accepts only the two intended products (`hints-5`, `continue-solo`) so it does not send accidental requests for unconfigured extras.
+**Required dashboard setup — the client code cannot create or publish store products.** The screenshots showing `not_for_sale` mean the SDK received the request but the product is not enabled for sale in the Lagos Life developer dashboard. This cannot be fixed by changing client code; enable the exact product under the correct game draft. The build now hides the optional `theme-gold` purchase button and accepts only the two intended products (`hints-3`, `continue-solo`) so it does not send accidental requests for unconfigured extras.
 
 Create/enable these exact product IDs under this game's draft, and set the listed sandbox/production prices as appropriate:
-- `hints-5` — **₦100**, grants five additional hints.
-- `continue-solo` — **₦100**, lets a player continue the same Solo/Story puzzle after the fourth mistake.
+- `hints-3` — **₦100**, grants three additional hints; can be purchased up to 3 times per game.
+- `continue-solo` — **₦200**, up to 2 continuations per game, lets a player continue the same Solo/Story puzzle after the fourth mistake.
 
 Optional products `hints-20` and `theme-gold` are disabled and excluded from the purchase allowlist in this build. Do not expose or enable them unless their grant logic, dashboard products, and server allowlist are deliberately reintroduced together.
 

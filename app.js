@@ -173,6 +173,8 @@
             errorCell: null,        // { row, col, startTime } for red flash
             highlightNumber: null,  // number to highlight across the board
             hintsUsed: 0,           // count hints used this game
+            hintPurchasesThisGame: 0, // max 3 hint packs per puzzle
+            continuePurchasesThisGame: 0, // max 2 paid continuations per puzzle
             floatingScores: [],     // [{x, y, text, startTime, color}] DOM animations
         };
 
@@ -2048,6 +2050,10 @@
         // GAME LIFECYCLE
         // ============================================
         function startGame() {
+            // Paid purchase limits reset only when a genuinely new puzzle starts.
+            gameState.hintPurchasesThisGame = 0;
+            gameState.continuePurchasesThisGame = 0;
+            window._sudokuPendingContinue = false;
             // Ensure we're in standard 9×9 mode (in case the user was in 16×16 before)
             gameState.gridSize = 9;
             gameState.boxSize  = 3;
@@ -3467,9 +3473,9 @@
                 const isDaily = gameState.isDailyChallenge;
                 icon.textContent  = solved ? (isDaily ? '📅' : (gameState.storyModeActive ? '🗺️' : '🎉')) : '🤔';
                 title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : (gameState.storyModeActive ? `Story Level ${gameState.storyLevel} Complete!` : 'Puzzle Complete!')) : (reason === 'mistake_limit' ? 'Four mistakes — puzzle over' : 'Keep Going!');
-                subtitle.textContent = solved ? `Solved in ${timeStr}` : (reason === 'mistake_limit' ? 'Continue this puzzle for ₦100, or start again.' : `Time elapsed: ${timeStr}`);
+                subtitle.textContent = solved ? `Solved in ${timeStr}` : (reason === 'mistake_limit' ? (gameState.continuePurchasesThisGame < 2 ? 'Continue this puzzle for ₦200, up to two times, or start again.' : 'You have used both paid continuations. Start a new puzzle to play again.') : `Time elapsed: ${timeStr}`);
                 const continueBtn = document.getElementById('continue-solo-btn');
-                if (continueBtn) continueBtn.style.display = (!solved && reason === 'mistake_limit' && window.Vatar && window._sudokuPendingContinue) ? 'block' : 'none';
+                if (continueBtn) continueBtn.style.display = (!solved && reason === 'mistake_limit' && window.Vatar && window._sudokuPendingContinue && gameState.continuePurchasesThisGame < 2) ? 'block' : 'none';
 
                 // Best time tracking
                 const diff = gameState.difficulty || 'medium';
@@ -3862,6 +3868,10 @@
         }
 
         function startGame16(difficulty) {
+            // A new 16×16 puzzle starts a fresh per-game purchase allowance.
+            gameState.hintPurchasesThisGame = 0;
+            gameState.continuePurchasesThisGame = 0;
+            window._sudokuPendingContinue = false;
             const diff = difficulty || 'medium';
             gameState.gridSize = 16;
             gameState.boxSize  = 4;
@@ -6626,8 +6636,18 @@
                     return true;
                 };
                 let loaded = false;
+                // Immediate, verified, date-scoped backup for the October 14, 2026 launch day.
+                // Render it before network requests so the newspaper never sits blank while feeds time out.
+                if (targetDate === '2026-10-13') {
+                    loaded = renderHeadline({
+                        title: 'Nigeria’s Dangote oil refinery swings to net profit ahead of IPO',
+                        description: 'Reuters reported on October 13 that Dangote Petroleum Refinery posted a $4.73 billion net profit for the first nine months of 2026 and extended its planned IPO application deadline to October 27.',
+                        source: 'Reuters',
+                        url: 'https://www.reuters.com/business/energy/nigerias-dangote-oil-refinery-swings-net-profit-ahead-ipo-2026-10-13/'
+                    });
+                }
                 // First try the companion server, when this build is deployed with it.
-                try {
+                if (!loaded) try {
                     const response = await fetch('/api/daily-news', {headers:{'Accept':'application/json'}, signal:AbortSignal.timeout(5000)});
                     if (response.ok) {
                         const news = await response.json();
@@ -7258,18 +7278,21 @@
         // Only expose products required by the current build. Optional products such as
         // hints-20 and theme-gold stay disabled until they are explicitly configured
         // and enabled for sale in the Lagos Life dashboard.
-        const PRODUCTS = new Set(['hints-5', 'continue-solo']);
+        const PRODUCTS = new Set(['hints-3', 'continue-solo']);
         const applyVerifiedPurchase = (productId) => {
             if (productId === 'continue-solo') {
                 if (!window._sudokuPendingContinue || gameState.gameMode !== 'solo') { showToast('Continue is only available immediately after a solo/story loss.', 2500); return; }
                 window._sudokuPendingContinue = false;
+                gameState.continuePurchasesThisGame = (gameState.continuePurchasesThisGame || 0) + 1;
                 const continueBtn = document.getElementById('continue-solo-btn'); if (continueBtn) continueBtn.style.display = 'none';
                 gameState.wrongMoves = 0; gameState.maxWrongMoves = 4; gameState.isRunning = true; gameState.isPaused = false; gameState.lastTick = Date.now();
                 document.getElementById('result-modal')?.classList.remove('active');
                 updateWrongMovesDisplay(); markGridDirty(); drawGrid(); saveOngoingGame();
                 showToast('Puzzle continued. Mistake counter reset.', 2500);
-            } else if (productId === 'hints-5') {
-                playerData.bonusHints = (playerData.bonusHints || 0) + 5; savePlayerData(); updateHintDisplay(); showToast('+5 bonus hints added!', 2500);
+            } else if (productId === 'hints-3') {
+                gameState.hintPurchasesThisGame = (gameState.hintPurchasesThisGame || 0) + 1;
+                playerData.bonusHints = (playerData.bonusHints || 0) + 3; savePlayerData(); updateHintDisplay();
+                showToast('+3 hints added! Pack ' + gameState.hintPurchasesThisGame + ' of 3 for this game.', 2800);
             }
         };
         const claimPurchase = async (purchase) => {

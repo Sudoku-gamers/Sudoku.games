@@ -25,7 +25,7 @@ Render runs your game and its server together on one HTTPS address, which Lagos 
 ## Step 4: Point Lagos Life at it
 1. Lagos Life developer dashboard, then your game, then change the Game URL to your Render address.
 2. Open the sandbox and press Reload game.
-3. Add three products in the dashboard with exactly these IDs: hints-5, hints-20, theme-gold.
+3. Add these two products in the dashboard: `hints-3` (₦100, grants 3 hints, maximum 3 purchases per game) and `continue-solo` (₦200, maximum 2 continuations per game).
 4. Make a test purchase in the sandbox. The checklist ticks the purchase boxes when your server verifies it.
 
 ## Notes

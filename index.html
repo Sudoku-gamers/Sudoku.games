@@ -803,9 +803,9 @@ create policy "public rw" on sudoku_rooms
                 <button class="tool-btn tool-btn-hint" id="hint-btn" title="Hint (reveals one safe cell)">💡<span class="hint-count" id="hint-count">2</span></button>
                 <!-- Vatar: buy hints button — hidden until Vatar SDK is active -->
                 <button class="tool-btn" id="vatar-buy-hints-btn"
-                        title="Buy 5 more hints for ₦100" aria-label="Buy five additional hints for 100 naira"
+                        title="Buy 3 more hints for ₦100 · maximum 3 purchases per game" aria-label="Buy three additional hints for 100 naira, up to three times per game"
                         style="display:none;font-size:0.75rem;padding:4px 8px;"
-                        onclick="window.vatarBuy && window.vatarBuy('hints-5')">+💡</button>
+                        onclick="window.vatarBuy && window.vatarBuy('hints-3')">+💡</button>
                 <!-- Optional paid themes are hidden until their store products are configured. -->
                 <button class="tool-btn" id="vatar-buy-theme-btn" title="Unlock Gold theme" style="display:none;font-size:0.75rem;padding:4px 8px;" aria-hidden="true" tabindex="-1">✨</button>
                 <button class="tool-btn tool-btn-resign" id="resign-btn" title="Resign">🏳</button>
@@ -926,7 +926,7 @@ create policy "public rw" on sudoku_rooms
             </div>
             <div class="modal-footer">
                 <button class="action-btn btn-primary" id="play-again-btn">Play Again</button>
-                <button class="action-btn btn-online" id="continue-solo-btn" style="display:none;" onclick="window.vatarBuy && window.vatarBuy('continue-solo')">Continue this puzzle · ₦100</button>
+                <button class="action-btn btn-online" id="continue-solo-btn" style="display:none;" onclick="window.vatarBuy && window.vatarBuy('continue-solo')">Continue this puzzle · ₦200 (max 2)</button>
                 <button class="action-btn btn-share" id="share-result-btn">📤 Share Result</button>
                 <button class="action-btn btn-secondary" id="back-to-lobby-btn">Back to Lobby</button>
             </div>
