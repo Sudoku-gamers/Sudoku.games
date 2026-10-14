@@ -132,7 +132,33 @@ function mime(file) {
   return ({ '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.json':'application/json; charset=utf-8', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.svg':'image/svg+xml', '.webp':'image/webp', '.ico':'image/x-icon', '.webmanifest':'application/manifest+json', '.txt':'text/plain; charset=utf-8' })[ext] || 'application/octet-stream';
 }
 
+const ALLOWED_ORIGINS = new Set([
+  'https://sudoku-gamers.github.io',
+  'https://sudoku-games-nhkl.onrender.com',
+  'https://lagoslife.app'
+]);
+
 const server = http.createServer(async (req, res) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  if (req.method === 'OPTIONS') {
+    if (origin && !ALLOWED_ORIGINS.has(origin)) {
+      console.warn('[CORS] blocked preflight from origin:', origin, 'path:', req.url);
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Origin' });
+      res.end(JSON.stringify({ error: 'origin_not_allowed' }));
+      return;
+    }
+    console.log('[CORS] preflight accepted:', origin || '(no origin)', req.url);
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     
@@ -164,8 +190,10 @@ const server = http.createServer(async (req, res) => {
 
       const result = await submitMatchResult(matchId, match.nonce, winnerId);
       if (result.http !== 200 && result.http !== 201 && result.http !== 204 && !result.success) {
+        console.error('[Vatar] signed result submission rejected:', { http: result.http, error: result.error || null });
         return send(res, 502, { error: 'result_upload_failed', details: result });
       }
+      console.log('[Vatar] signed result accepted by Lagos Life:', { matchId, http: result.http });
       return send(res, 200, { success: true, winner: winnerId });
     }
 
