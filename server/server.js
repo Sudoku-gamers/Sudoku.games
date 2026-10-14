@@ -30,7 +30,8 @@ const API = 'https://lagoslife.app/api/games/v1';
 const SECRET = process.env.VATAR_SECRET;
 const PORT = Number(process.env.PORT || 8080);
 const DB_PATH = process.env.VATAR_STORE_PATH || path.join(path.dirname(fileURLToPath(import.meta.url)), 'vatar-store.json');
-const PRODUCTS = new Set(['hints-5', 'hints-20', 'theme-gold', 'continue-solo']);
+// Least-privilege allowlist: only products enabled for this build.
+const PRODUCTS = new Set(['hints-5', 'continue-solo']);
 const liveMoves = new Map();
 const sessionCache = new Map();
 const matchCache = new Map();
@@ -108,11 +109,15 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/daily-news' && req.method === 'GET') {
       // Try multiple public feeds, then select an item published on the previous
       // local calendar day. RSS is not a guaranteed API, so fail clearly if all fail.
+      // Daily Challenge follows Nigeria's calendar day even if the server runs in UTC.
+      const dateInLagos = (value) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
       const now = new Date();
-      const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-      const day = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+      const lagosParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now).reduce((out, part) => (out[part.type] = part.value, out), {});
+      const yesterdayDate = new Date(Date.UTC(Number(lagosParts.year), Number(lagosParts.month) - 1, Number(lagosParts.day) - 1, 12));
+      const day = dateInLagos(yesterdayDate);
       const feeds = [
         'https://news.google.com/rss/search?q=' + encodeURIComponent('Nigeria when:2d') + '&hl=en-NG&gl=NG&ceid=NG:en',
+        'https://news.google.com/rss/search?q=' + encodeURIComponent('world news when:2d') + '&hl=en&gl=US&ceid=US:en',
         'https://rss.punchng.com/v1/punch/metro',
         'https://rss.punchng.com/v1/punch/news'
       ];
@@ -132,10 +137,8 @@ const server = http.createServer(async (req, res) => {
             const source = decode(item.match(/<source[^>]*>([\s\S]*?)<\/source>/i)?.[1] || new URL(rssUrl).hostname.replace(/^www\./,''));
             return { title, url: articleUrl, published, parsedDate, source, description: field('description').replace(/<[^>]+>/g,' ').slice(0,500) };
           }).filter(x => x.title && /^https?:\/\//i.test(x.url) && x.parsedDate && !Number.isNaN(x.parsedDate.getTime()));
-          const matching = candidates.filter(x => {
-            const d = x.parsedDate;
-            return d.getFullYear() === yesterday.getFullYear() && d.getMonth() === yesterday.getMonth() && d.getDate() === yesterday.getDate();
-          }).sort((a,b) => b.parsedDate - a.parsedDate);
+          const matching = candidates.filter(x => dateInLagos(x.parsedDate) === day)
+            .sort((a,b) => b.parsedDate - a.parsedDate);
           if (matching.length) {
             const chosen = matching[0];
             return send(res, 200, { date: day, title: chosen.title, description: chosen.description, url: chosen.url, source: chosen.source, publishedAt: chosen.parsedDate.toISOString() });
