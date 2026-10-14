@@ -6626,18 +6626,8 @@
                     return true;
                 };
                 let loaded = false;
-                // Immediate, verified, date-scoped backup for the October 14, 2026 launch day.
-                // Render it before network requests so the newspaper never sits blank while feeds time out.
-                if (targetDate === '2026-10-13') {
-                    loaded = renderHeadline({
-                        title: 'Nigeria’s Dangote oil refinery swings to net profit ahead of IPO',
-                        description: 'Reuters reported on October 13 that Dangote Petroleum Refinery posted a $4.73 billion net profit for the first nine months of 2026 and extended its planned IPO application deadline to October 27.',
-                        source: 'Reuters',
-                        url: 'https://www.reuters.com/business/energy/nigerias-dangote-oil-refinery-swings-net-profit-ahead-ipo-2026-10-13/'
-                    });
-                }
                 // First try the companion server, when this build is deployed with it.
-                if (!loaded) try {
+                try {
                     const response = await fetch('/api/daily-news', {headers:{'Accept':'application/json'}, signal:AbortSignal.timeout(5000)});
                     if (response.ok) {
                         const news = await response.json();
