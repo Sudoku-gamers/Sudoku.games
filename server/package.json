@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node test-server.mjs"
+    "test": "node ../test-server.mjs && node tests/forfeit.test.mjs && node tests/frontend-forfeit.test.mjs"
   },
   "engines": {
     "node": ">=18"
