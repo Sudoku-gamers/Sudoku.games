@@ -27,3 +27,27 @@ try {
 } finally { child.kill(); }
 console.log(failed ? `${failed} test(s) FAILED` : 'All tests passed');
 process.exit(failed ? 1 : 0);
+import crypto from 'crypto';
+
+export async function uploadMatchResult(match, winnerId) {
+    const ts = String(Math.floor(Date.now() / 1000));
+    const path = `/api/games/v1/matches/${match.id}/result`;
+    const body = JSON.stringify({ winner: winnerId }); // playerId or "draw"
+    
+    const sha = crypto.createHash("sha256").update(body).digest("hex");
+    const sig = "v1=" + crypto.createHmac("sha256", process.env.VATAR_RESULTS_SECRET)
+      .update(["POST", path, ts, match.nonce, sha].join("\n")).digest("hex");
+
+    const response = await fetch(process.env.VATAR_API + path, { 
+        method: "POST", 
+        body, 
+        headers: {
+            Authorization: `Bearer ${process.env.VATAR_SECRET}`, 
+            "Content-Type": "application/json",
+            "X-Vatar-Timestamp": ts, 
+            "X-Vatar-Signature": sig 
+        } 
+    });
+
+    return await response.json();
+}
