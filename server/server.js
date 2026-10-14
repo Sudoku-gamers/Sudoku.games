@@ -30,7 +30,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API = 'https://lagoslife.app/api/games/v1';
 const SECRET = process.env.VATAR_SECRET;
 const RESULTS_SECRET = process.env.VATAR_RESULTS_SECRET;
+const WEBHOOK_SECRET = process.env.VATAR_WEBHOOK_SECRET;
 const PORT = Number(process.env.PORT || 8080);
+const BUILD_ID = 'forfeit-fix-2026-10-14';
 const DB_PATH = process.env.VATAR_STORE_PATH || path.join(path.dirname(fileURLToPath(import.meta.url)), 'vatar-store.json');
 // Least-privilege allowlist: only products enabled for this build.
 const PRODUCTS = new Set(['hints-3', 'continue-solo']);
@@ -44,6 +46,7 @@ const MAX_BODY = 64 * 1024;
 
 if (!SECRET) console.warn('[Vatar] VATAR_SECRET is not set. Purchase verification will return 503.');
 if (!RESULTS_SECRET) console.warn('[Vatar] VATAR_RESULTS_SECRET is not set. Match result submission will fail.');
+if (!WEBHOOK_SECRET) console.warn('[Vatar] VATAR_WEBHOOK_SECRET is not set. Webhook signature verification will return 503.');
 
 async function readStore() {
   try { return JSON.parse(await fs.readFile(DB_PATH, 'utf8')); }
@@ -54,6 +57,25 @@ async function writeStore(store) {
   await fs.writeFile(temp, JSON.stringify(store, null, 2), { mode: 0o600 });
   await fs.rename(temp, DB_PATH);
 }
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = []; let size = 0;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > MAX_BODY) { reject(Object.assign(new Error('body_too_large'), { status: 413 })); req.destroy(); return; }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+function validWebhookSignature(raw, header) {
+  if (!WEBHOOK_SECRET || typeof header !== 'string') return false;
+  const expected = Buffer.from('sha256=' + crypto.createHmac('sha256', WEBHOOK_SECRET).update(raw).digest('hex'));
+  const received = Buffer.from(header);
+  return expected.length === received.length && crypto.timingSafeEqual(expected, received);
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = []; let size = 0;
@@ -69,51 +91,48 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
-async function verifiedPlayer(session) {
+// `diag` is optional. When given, it receives the upstream HTTP status so a caller can tell
+// "Lagos Life said no" (4xx) apart from "Lagos Life could not be reached" (0 / 5xx).
+async function verifiedPlayer(session, diag) {
   const key = crypto.createHash('sha256').update(session).digest('hex');
   const cached = sessionCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.player;
   const player = await vatarApi('/session/verify', { session });
+  if (diag) diag.http = player.http;
   if (player.http !== 200 || !player.playerId) return null;
   sessionCache.set(key, { player, expiresAt: Date.now() + 30_000 });
   return player;
 }
-async function verifiedMatch(matchId) {
+// `fresh: true` skips the 5-second cache. The forfeit route uses it so a settlement is never
+// decided from a stale match status.
+async function verifiedMatch(matchId, { fresh = false, diag } = {}) {
   const cached = matchCache.get(matchId);
-  if (cached && cached.expiresAt > Date.now()) return cached.match;
+  if (!fresh && cached && cached.expiresAt > Date.now()) return cached.match;
   const match = await vatarApi(`/matches/${encodeURIComponent(matchId)}`);
+  if (diag) diag.http = match.http;
   if (match.http !== 200 || !match.id) return null;
   matchCache.set(matchId, { match, expiresAt: Date.now() + 5_000 });
   return match;
 }
 async function vatarApi(route, body) {
   if (!SECRET) return { http: 503, error: 'server_not_configured' };
-  const response = await fetch(API + route, {
-    method: body === undefined ? 'GET' : 'POST',
-    headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) })
-  });
-  // Preserve the upstream response text for diagnosis. Lagos Life may return
-  // a non-JSON error body, so parsing JSON alone can hide the actual reason.
-  let responseText = '';
-  let data = {};
-  try { responseText = await response.text(); } catch {}
-  if (responseText) {
-    try { data = JSON.parse(responseText); } catch {}
-  }
-  if (!response.ok) {
-    // Log only the upstream status and a short response excerpt. Never log
-    // credentials, session tokens, signatures, or request headers.
-    console.error('[Vatar] Lagos Life result API response:', {
-      http: response.status,
-      error: data?.error || data?.code || null,
-      responseExcerpt: responseText.slice(0, 500) || null
+  let response;
+  try {
+    response = await fetch(API + route, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(10000)
     });
-  } else {
-    console.log('[Vatar] Lagos Life result API returned success status:', response.status);
+  } catch (err) {
+    console.error('[Vatar] API request failed before an HTTP response:', route.replace(/\/[^/]*$/, '/…'), err?.name || 'error');
+    return { http: 0, error: 'upstream_unreachable' };
   }
-  return { http: response.status, ...data, ...(responseText && !Object.keys(data).length ? { responseText: responseText.slice(0, 500) } : {}) };
+  let data = {};
+  try { data = await response.json(); } catch {}
+  return { ...data, http: response.status };
 }
+const upstreamIsDown = (http) => http === 0 || http >= 500;
 
 // Signed match result submitter matching Vatar's API requirement
 async function submitMatchResult(matchId, matchNonce, winnerPlayerIdOrDraw) {
@@ -146,7 +165,7 @@ async function submitMatchResult(matchId, matchNonce, winnerPlayerIdOrDraw) {
   }
   let data = {};
   try { data = await response.json(); } catch {}
-  return { http: response.status, ...data };
+  return { ...data, http: response.status };
 }
 
 function send(res, status, data, extraHeaders = {}) {
@@ -188,6 +207,28 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     
+    // Lagos Life/Vatar signed webhook receiver. Notifications are diagnostic only;
+    // match results must still be submitted through the signed result API.
+    if (url.pathname === '/vatar-webhook' && req.method === 'POST') {
+      if (!WEBHOOK_SECRET) return send(res, 503, { error: 'webhook_not_configured' });
+      const raw = await readRawBody(req);
+      const signature = req.headers['x-vatar-signature'];
+      if (!validWebhookSignature(raw, signature)) {
+        console.warn('[Vatar webhook] rejected: invalid_signature');
+        return send(res, 401, { error: 'invalid_signature' });
+      }
+      let event;
+      try { event = JSON.parse(raw.toString('utf8')); }
+      catch { return send(res, 400, { error: 'invalid_json' }); }
+      const eventType = String(event?.type || req.headers['x-vatar-event'] || 'unknown');
+      const deliveryId = String(event?.id || req.headers['x-vatar-delivery'] || 'unknown');
+      console.log('[Vatar webhook] verified event received:', {
+        type: eventType, deliveryId, mode: event?.mode || null,
+        matchId: event?.data?.matchId || event?.data?.id || null
+      });
+      return send(res, 200, { received: true });
+    }
+
     // Endpoint to handle match completion / mistake limit forfeiture
     if (url.pathname === '/api/vatar/match/forfeit' && req.method === 'POST') {
       console.log('[Vatar] forfeit route reached');
@@ -197,18 +238,47 @@ const server = http.createServer(async (req, res) => {
         console.warn('[Vatar] forfeit rejected before verification: invalid_request');
         return send(res, 400, { error: 'invalid_request' });
       }
+      if (!SECRET || !RESULTS_SECRET) {
+        console.error('[Vatar] forfeit cannot be settled: VATAR_SECRET / VATAR_RESULTS_SECRET not set on this service');
+        return send(res, 503, { error: 'server_not_configured' });
+      }
 
-      const player = await verifiedPlayer(session);
+      const playerDiag = {};
+      const player = await verifiedPlayer(session, playerDiag);
       if (!player) {
+        if (upstreamIsDown(playerDiag.http)) {
+          console.warn('[Vatar] forfeit failed: Lagos Life unreachable during session check', { http: playerDiag.http });
+          return send(res, 502, { error: 'lagos_life_unreachable', upstream: { http: playerDiag.http } });
+        }
         console.warn('[Vatar] forfeit rejected: invalid_session');
         return send(res, 403, { error: 'invalid_session' });
       }
 
-      const match = await verifiedMatch(matchId);
+      // Always read the match fresh: a settlement must never rest on a cached status.
+      const matchDiag = {};
+      const match = await verifiedMatch(matchId, { fresh: true, diag: matchDiag });
+      if (!match && upstreamIsDown(matchDiag.http)) {
+        console.warn('[Vatar] forfeit failed: Lagos Life unreachable during match check', { http: matchDiag.http });
+        return send(res, 502, { error: 'lagos_life_unreachable', upstream: { http: matchDiag.http } });
+      }
       // Accept both API field spellings while still comparing only server-verified IDs.
       const playerIdOf = (item) => item?.playerId ?? item?.id ?? null;
       const players = Array.isArray(match?.players) ? match.players : [];
       const callerIsInMatch = players.some(item => playerIdOf(item) === player.playerId);
+
+      // Idempotent replay. If the first request settled the match but its response never reached the
+      // browser, the retry finds the match already `done`. Lagos Life's own record decides the answer:
+      // the verified caller is reported as the loser only if the opponent is the recorded winner.
+      if (match?.status === 'done' && players.length === 2 && callerIsInMatch && player.playerId === defeatedPlayerId) {
+        const recordedWinner = playerIdOf(players.find(item => playerIdOf(item) !== player.playerId));
+        if (recordedWinner && match.winner === recordedWinner) {
+          console.log('[Vatar] forfeit replay: match already settled with this winner', { matchId });
+          return send(res, 200, { success: true, winner: recordedWinner, alreadySettled: true });
+        }
+        console.warn('[Vatar] forfeit rejected: match already settled with a different outcome');
+        return send(res, 409, { error: 'already_settled' });
+      }
+
       if (!match || match.status !== 'playing' || players.length !== 2 || !callerIsInMatch) {
         console.warn('[Vatar] forfeit rejected: not_active_two_player_match', {
           matchFound: Boolean(match), matchStatus: match?.status ?? null,
@@ -237,15 +307,17 @@ const server = http.createServer(async (req, res) => {
         return send(res, 409, { error: 'opponent_not_found' });
       }
 
-      console.log('[Vatar] submitting forfeit result to Lagos Life:', {
-        matchStatus: match.status, playerCount: players.length, hasNonce: Boolean(match.nonce)
-      });
       const result = await submitMatchResult(matchId, match.nonce, winnerId);
-      const accepted = [200, 201, 204].includes(result.http) ||
-        (result.http >= 200 && result.http < 300 && result.success === true);
-      if (!accepted) {
-        console.error('[Vatar] signed result submission rejected:', { http: result.http, error: result.error || null });
-        return send(res, 502, { error: 'result_upload_failed', details: result });
+      // Only the upstream status and error code are ever echoed back, never the full response.
+      const upstream = { http: result.http, error: typeof result.error === 'string' ? result.error : null };
+      if (!(result.http >= 200 && result.http < 300)) {
+        console.error('[Vatar] signed result submission rejected:', upstream);
+        // Documented Lagos Life errors: 401 bad_signature / stale_timestamp / bad_secret, 409 not_playing / already_settled.
+        if (result.http === 409 && result.error === 'already_settled') return send(res, 409, { error: 'already_settled', upstream });
+        if (result.http === 409 && result.error === 'not_playing') return send(res, 409, { error: 'match_not_playing', upstream });
+        if (result.http === 401) return send(res, 502, { error: 'result_signing_rejected', upstream });
+        if (upstreamIsDown(result.http)) return send(res, 502, { error: 'lagos_life_unreachable', upstream });
+        return send(res, 502, { error: 'result_upload_failed', upstream });
       }
       console.log('[Vatar] signed result accepted by Lagos Life:', { matchId, http: result.http });
       return send(res, 200, { success: true, winner: winnerId });
@@ -427,7 +499,12 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { delivered: true, grant: shouldGrant, productId: purchase.productId });
     }
 
-    if (req.method === 'GET' && url.pathname === '/healthz') return send(res, 200, { ok: true, service: 'sudoku-vatar' });
+    // `build` lets you confirm which code Render is really running. The booleans only say whether the
+    // two secrets are present; the values are never exposed.
+    if (req.method === 'GET' && url.pathname === '/healthz') return send(res, 200, {
+      ok: true, service: 'sudoku-vatar', build: BUILD_ID, forfeitRoute: true,
+      resultsConfigured: Boolean(SECRET && RESULTS_SECRET)
+    });
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 404, { error: 'not_found' });
 
     // Static hosting for the game. frame-ancestors is an HTTP header, not a meta tag.
