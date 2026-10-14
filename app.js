@@ -2144,6 +2144,7 @@
             gameState.lastTick = Date.now();
             gameState.wrongMoves = 0;
             gameState.maxWrongMoves = 4;
+            window._sudokuLastWrongAttempt = null;
             gameState.hintsUsed  = 0;
             gameState.errorCell  = null;
             gameState.highlightNumber = null;
@@ -3103,6 +3104,16 @@
 
             // Wrong move handling. Solo/story games end on the fourth mistake.
             if (gameState.solution[row][col] !== number) {
+                // Debounce duplicate handlers/taps on the same wrong cell and digit.
+                const _attemptNow = Date.now();
+                if (window._sudokuLastWrongAttempt &&
+                    window._sudokuLastWrongAttempt.row === row &&
+                    window._sudokuLastWrongAttempt.col === col &&
+                    window._sudokuLastWrongAttempt.number === number &&
+                    _attemptNow - window._sudokuLastWrongAttempt.time < 700) return;
+                window._sudokuLastWrongAttempt = { row, col, number, time: _attemptNow };
+                gameState.wrongMoves = Math.max(0, Number(gameState.wrongMoves) || 0);
+                gameState.maxWrongMoves = 4;
                 gameState.wrongMoves++;
                 gameState.totalWrongMoves++;
                 gameState.errorCell = { row, col, startTime: Date.now() };
