@@ -1416,7 +1416,7 @@
             document.getElementById('hint-btn')?.addEventListener('click', function() {
                 if (!gameState.isRunning) return;
                 const N = gameState.gridSize || 9;
-                const maxHints = 2;
+                const maxHints = 3;
                 const usingBonusHint = gameState.hintsUsed >= maxHints;
                 if (usingBonusHint && (playerData.bonusHints || 0) <= 0) {
                     showToast(`No hints left (${maxHints} included on ${gameState.difficulty})`, 2200);
@@ -1500,7 +1500,7 @@
 
         function updateHintDisplay() {
             const N = gameState.gridSize || 9;
-            const maxHints = 2;
+            const maxHints = 3;
             const remaining = Math.max(0, maxHints - (gameState.hintsUsed || 0)) + Math.max(0, playerData.bonusHints || 0);
             const el = document.getElementById('hint-count');
             const btn = document.getElementById('hint-btn');
@@ -1510,6 +1510,17 @@
                 btn.title = remaining === 0
                     ? `No hints left on ${gameState.difficulty}`
                     : `Hint — reveal one cell (${remaining} left)`;
+            }
+            const buyBtn = document.getElementById('vatar-buy-hints-btn');
+            if (buyBtn) {
+                const purchases = Number(gameState.hintPurchasesThisGame) || 0;
+                const capped = purchases >= 3;
+                buyBtn.disabled = capped;
+                buyBtn.style.opacity = capped ? '0.35' : '1';
+                buyBtn.title = capped
+                    ? 'You have bought the maximum 3 hint packs for this game'
+                    : `Buy 3 hints for ₦100 · ${3 - purchases} purchase${3 - purchases === 1 ? '' : 's'} left this game`;
+                buyBtn.setAttribute('aria-disabled', capped ? 'true' : 'false');
             }
         }
 
@@ -1584,17 +1595,18 @@
         }
 
         // ============================================
-        // ENDLESS STORY MODE — locally saved progression
+        // STORY MODE — locally saved progression
         // ============================================
         const STORY_SAVE_KEY = 'sudoku_endless_story_v1';
         // Newspaper-inspired story chapters. Difficulty is determined by Sudoku logic,
         // never by a newspaper's credibility or popularity.
         const STORY_NEWSPAPERS = [
-            { name: 'The Punch', short: 'PUNCH', edition: 'The Daily Grind', region: 'Lagos', intro: 'Build confidence with approachable puzzles.', start: 1, end: 5, difficulty: 'easy', mark: 'P' },
-            { name: 'Vanguard', short: 'VANGUARD', edition: 'The Newsroom', region: 'Lagos', intro: 'Sharper patterns and more careful deduction.', start: 6, end: 12, difficulty: 'medium', mark: 'V' },
-            { name: 'The Guardian', short: 'GUARDIAN', edition: 'The Editorial Desk', region: 'Lagos', intro: 'Longer chains of logic for patient solvers.', start: 13, end: 22, difficulty: 'hard', mark: 'G' },
-            { name: 'THISDAY', short: 'THISDAY', edition: 'The Front Page Challenge', region: 'Lagos', intro: 'A demanding edition for experienced players.', start: 23, end: 35, difficulty: 'extreme', mark: 'T' },
-            { name: 'Daily Trust', short: 'DAILY TRUST', edition: 'The National Edition', region: 'Abuja', intro: 'Keep the streak alive as the endless run grows.', start: 36, end: Infinity, difficulty: 'extreme', mark: 'D' }
+            { name: 'Daily Times', short: 'DAILY TIMES', edition: 'Tafawa Balewa · The Independence Years', region: 'Nigeria · 1960–1966', intro: 'Begin with Nigeria’s early independence years. Historical summaries are clearly distinguished from headlines transcribed from original editions.', start: 1, end: 5, difficulty: 'easy', mark: 'DT' },
+            { name: 'The Punch', short: 'PUNCH', edition: 'The Daily Grind', region: 'Lagos', intro: 'Build confidence with approachable puzzles.', start: 6, end: 10, difficulty: 'easy', mark: 'P' },
+            { name: 'Vanguard', short: 'VANGUARD', edition: 'The Newsroom', region: 'Lagos', intro: 'Sharper patterns and more careful deduction.', start: 11, end: 17, difficulty: 'medium', mark: 'V' },
+            { name: 'The Guardian', short: 'GUARDIAN', edition: 'The Editorial Desk', region: 'Lagos', intro: 'Longer chains of logic for patient solvers.', start: 18, end: 27, difficulty: 'hard', mark: 'G' },
+            { name: 'THISDAY', short: 'THISDAY', edition: 'The Front Page Challenge', region: 'Lagos', intro: 'A demanding edition for experienced players.', start: 28, end: 40, difficulty: 'extreme', mark: 'T' },
+            { name: 'Daily Trust', short: 'DAILY TRUST', edition: 'The National Edition', region: 'Abuja', intro: 'Keep the streak alive as the story continues.', start: 41, end: Infinity, difficulty: 'extreme', mark: 'D' }
         ];
         let storyProgress = loadStoryProgress();
         function loadStoryProgress() {
@@ -1655,21 +1667,21 @@
         let storyEditionStep = 0;
         const STORY_EDITION_FEATURES = {
             1: {
-                date: 'WEDNESDAY, 7 JANUARY 1981',
-                kicker: 'NIGERIA · ECONOMY',
-                headline: "Nigeria's economy faces a difficult year",
-                deck: 'A look back at the economic pressures facing the country in 1981.',
-                preview: 'Nigeria entered 1981 amid shifting economic conditions. Petroleum remained central to the national economy, while industrial production and prices were under pressure.',
-                articleTitle: 'A country at an economic crossroads',
-                article: 'The year 1981 brought serious economic pressures for Nigeria. The Central Bank of Nigeria’s annual report recorded a decline in industrial production, driven largely by weaker mining output, particularly petroleum. At the same time, consumer prices rose sharply.',
-                article2: 'These figures tell a story of a country navigating changing oil revenues, production challenges and the everyday effects of inflation. This edition invites you to pause with that historical moment before turning to a different kind of challenge: finding order in a grid of numbers.',
-                note: 'ARCHIVE NOTE: This is a newly written historical summary, not a verbatim headline or article from The Punch. The date identifies a documented Punch issue in the National Library of Nigeria’s newspaper locator; the economic context is based on the Central Bank of Nigeria’s 1981 annual report.'
+                date: 'SATURDAY, 1 OCTOBER 1960',
+                kicker: 'DAILY TIMES · NIGERIA INDEPENDENCE DAY',
+                headline: 'HERBERT MACAULAY — THE FIGHTER',
+                deck: 'A historical tribute printed on Nigeria’s independence day. The supplied reproduction identifies this as Daily Times page 23.',
+                preview: 'The independence-day edition remembered Herbert Macaulay, an influential nationalist who died in 1946 and therefore did not live to see independence. His political organising helped shape the nationalist movement that later generations continued.',
+                articleTitle: 'The nationalist who did not live to see independence',
+                article: 'Herbert Macaulay (1864–1946) was a Nigerian nationalist, political activist and engineer. The Central Bank of Nigeria’s biography records his campaign against colonial rule and discrimination, and his role in founding the Nigerian National Democratic Party. In 1944, he became the first president of the National Council of Nigeria and the Cameroons, formed with Nnamdi Azikiwe.',
+                article2: 'Macaulay died on 7 May 1946, fourteen years before Nigeria became independent. The headline and date are transcribed from the newspaper-page reproduction supplied for this project. The image has not yet been authenticated against an archival master. This explanatory article is newly written for the game, not a transcription of the original article.',
+                note: 'SOURCE NOTE: Headline transcribed from the supplied reproduction: “HERBERT MACAULAY — THE FIGHTER”; printed date shown: 1 October 1960; page number shown: 23. Independent context: National Library of Nigeria, “A portrait of Herbert Macaulay” (1864–1946), https://nigeriareposit.nln.gov.ng/items/6acd2f0d-0e97-4b46-9ea4-1c204d492485 ; Central Bank of Nigeria biography, https://www.cbn.gov.ng/Currency/Biodata/Macualey.html . Reproduction provenance and reuse permission remain to be confirmed.'
             }
         };
         function storyEditionContent(level) {
             const paper = storyNewspaper(level);
             if (STORY_EDITION_FEATURES[level]) return STORY_EDITION_FEATURES[level];
-            const year = level <= 5 ? 1981 : level <= 12 ? 1982 : level <= 22 ? 1983 : level <= 35 ? 1984 : 1985 + Math.floor((level - 36) / 5);
+            const year = level <= 5 ? 1960 + Math.floor((level - 1) / 2) : level <= 10 ? 1981 : level <= 17 ? 1982 : level <= 27 ? 1983 : level <= 40 ? 1984 : 1985 + Math.floor((level - 41) / 5);
             return {
                 date: `ARCHIVE JOURNEY · ${year}`,
                 kicker: `NIGERIA · ${paper.name.toUpperCase()}`,
@@ -1694,6 +1706,17 @@
             document.getElementById('story-edition-date').textContent = content.date;
             document.getElementById('story-edition-number').textContent = `EDITION ${String(level).padStart(3, '0')} · LEVEL ${level}`;
             document.getElementById('story-edition-kicker').textContent = content.kicker;
+            const historicalImageId = 'story-historical-source-image';
+            document.getElementById(historicalImageId)?.remove();
+            if (level === 1) {
+                const scan = document.createElement('img');
+                scan.id = historicalImageId;
+                scan.src = './daily-times-1960-10-01-page23.jpg';
+                scan.alt = 'Reproduction of Daily Times page 23 dated 1 October 1960, with the headline Herbert Macaulay — The Fighter and an independence congratulatory advertisement';
+                scan.loading = 'lazy';
+                scan.style.cssText = 'display:block;width:min(100%,420px);max-height:360px;object-fit:contain;object-position:top;margin:12px auto;border:1px solid currentColor;background:#f4efdf;';
+                document.getElementById('story-edition-front').insertBefore(scan, document.getElementById('story-edition-headline'));
+            }
             document.getElementById('story-edition-headline').textContent = content.headline;
             document.getElementById('story-edition-deck').textContent = content.deck;
             document.getElementById('story-edition-preview').textContent = content.preview;
@@ -3506,7 +3529,7 @@
                 }
 
                 // Build compact 2-column stats grid
-                const maxHints = 2;
+                const maxHints = 3;
                 const finalScore = gameState.scores.p1;
                 grid.style.display = 'grid';
                 grid.style.gridTemplateColumns = '1fr 1fr';
@@ -7290,8 +7313,16 @@
                 updateWrongMovesDisplay(); markGridDirty(); drawGrid(); saveOngoingGame();
                 showToast('Puzzle continued. Mistake counter reset.', 2500);
             } else if (productId === 'hints-3') {
-                gameState.hintPurchasesThisGame = (gameState.hintPurchasesThisGame || 0) + 1;
-                playerData.bonusHints = (playerData.bonusHints || 0) + 3; savePlayerData(); updateHintDisplay();
+                const purchases = Number(gameState.hintPurchasesThisGame) || 0;
+                if (purchases >= 3) {
+                    showToast('You have reached the limit of 3 hint purchases for this game.', 3000);
+                    updateHintDisplay();
+                    return;
+                }
+                gameState.hintPurchasesThisGame = purchases + 1;
+                playerData.bonusHints = (playerData.bonusHints || 0) + 3;
+                savePlayerData();
+                updateHintDisplay();
                 showToast('+3 hints added! Pack ' + gameState.hintPurchasesThisGame + ' of 3 for this game.', 2800);
             }
         };
@@ -7308,6 +7339,11 @@
         };
         window.vatarBuy = async (productId) => {
             if (!PRODUCTS.has(productId)) return;
+            if (productId === 'hints-3' && (Number(gameState.hintPurchasesThisGame) || 0) >= 3) {
+                showToast('You have reached the limit of 3 hint purchases for this game.', 3000);
+                updateHintDisplay();
+                return;
+            }
             if (productId === 'continue-solo' && (!window._sudokuPendingContinue || gameState.gameMode !== 'solo')) { showToast('Continue is only available after a solo/story loss.', 2500); return; }
             try { await V.purchase(productId); }
             catch (err) { vatarError(err); return; }

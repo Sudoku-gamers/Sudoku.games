@@ -35,7 +35,7 @@ The server uses Node built-ins only. In production, set `VATAR_SECRET` as a host
 
 The SDK's native match API provides matchmaking and match lifecycle, not arbitrary game events. This project adds authenticated match-config and move/completion relay endpoints to the companion server and seeds both clients' puzzle generation from the match ID. Match configuration and relay events are in-memory and intended for a single test instance. The relay checks Vatar session identity and match membership, but it does **not** independently validate the Sudoku solution or determine the winner. **Signed match-result settlement is not implemented**, so paid stakes must remain disabled. Before any staked match or public competitive-result claim, move puzzle generation/solution and move validation server-side, make move storage durable, implement the documented HMAC-SHA256 result signing with `VATAR_RESULTS_SECRET`, and test the complete result path in sandbox. Local pass-and-play and standalone Supabase modes are retained.
 
-Endless Story Mode is a solo progression map with locally saved unlocks and stars; Solo Sudoku, Daily Challenge, and Technique Dojo remain available.
+Story Mode is a solo progression map with locally saved unlocks and stars; Solo Sudoku, Daily Challenge, and Technique Dojo remain available.
 
 The purchase endpoint verifies the signed Vatar session, fetches the purchase from Vatar, checks ownership/status/product allowlist, and marks it delivered. The included JSON store is intended for a single Node instance with persistent disk; use a transactional database/unique purchase ID constraint before horizontal scaling.
 

@@ -3539,7 +3539,7 @@ select.setting-input option { background: var(--bg) !important; color: var(--tex
     .tool-btn { width: 44px !important; height: 44px !important; }
 }
 
-/* Endless Story Mode */
+/* Story Mode */
 .story-map-card { width:min(680px,94vw); max-height:88vh; overflow:hidden; display:flex; flex-direction:column; padding:0; background:#111827; border:1px solid rgba(139,230,154,.24); }
 .story-map-header { padding:24px 24px 14px; background:radial-gradient(ellipse at top right,rgba(86,211,100,.15),transparent 65%); }
 .story-map-kicker { color:#8be69a; font-size:.68rem; font-weight:900; letter-spacing:.18em; }
@@ -3559,7 +3559,7 @@ select.setting-input option { background: var(--bg) !important; color: var(--tex
 .story-map-footer { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:12px 20px; border-top:1px solid #293244; color:#aeb8c8; font-size:.7rem; }
 @media(max-width:420px) { .story-level-map { grid-template-columns:repeat(3,minmax(0,1fr)); padding:12px; gap:8px; } .story-level { min-height:72px; } .story-map-header { padding:20px 18px 12px; } }
 
-/* Nigerian newspaper collection for Endless Story Mode */
+/* Nigerian newspaper collection for Story Mode */
 .story-map-card { width:min(760px,96vw); }
 .story-newspaper-feature { margin:0 20px; padding:14px 16px; background:#f1eadb; color:#201d18; border:1px solid #c9bda8; border-radius:8px; box-shadow:0 3px 0 rgba(0,0,0,.16); }
 .story-paper-masthead { display:flex; align-items:center; gap:12px; }
@@ -3573,7 +3573,7 @@ select.setting-input option { background: var(--bg) !important; color: var(--tex
 .story-level { padding:7px 3px; }
 @media(max-width:420px) { .story-newspaper-feature { margin:0 12px; padding:12px; } .story-paper-masthead h3 { font-size:1.15rem; } }
 
-/* Immersive newspaper reader — Endless Story Mode */
+/* Immersive newspaper reader — Story Mode */
 #story-edition-modal { z-index: 1200; padding:18px 10px; overflow-y:auto; background:rgba(10,12,16,.88); backdrop-filter:blur(7px); }
 .story-edition-shell { position:relative; width:min(780px,96vw); margin:auto; padding:18px 0 0; color:#241e17; }
 .story-edition-close { position:absolute; z-index:3; right:8px; top:0; width:36px; height:36px; border:1px solid #6c5c47; border-radius:50%; background:#f1e7d2; color:#241e17; font-size:1.5rem; cursor:pointer; }

@@ -1,12 +1,12 @@
 # Sudoku.games — Lagos Life-ready build
 
-A browser-based Sudoku game with Cell Capture multiplayer, Competitive Solve-Off, solo puzzles, Daily Challenge, Technique Dojo, and Endless Story Mode.
+A browser-based Sudoku game with Cell Capture multiplayer, Competitive Solve-Off, solo puzzles, Daily Challenge, Technique Dojo, and Story Mode.
 
 ## Modes
 
 - **Cell Capture:** both players compete on one shared board and score correct cells.
 - **Competitive Solve-Off:** each player solves their own copy of the same match puzzle; first correct completion wins. Match setup shares the selected mode, difficulty, variant, and 1–20 minute clock through the companion server. Wrong entries are rejected without a time penalty.
-- **Endless Story Mode:** solo level map, sequential unlocking, increasing difficulty, star ratings, and locally saved progress.
+- **Story Mode:** solo level map, sequential unlocking, increasing difficulty, star ratings, and locally saved progress.
 - Existing Solo Sudoku, Daily Challenge, and Technique Dojo are retained.
 
 ## Run locally
@@ -37,4 +37,4 @@ also no longer forces a reload on its first-ever controller takeover.
 
 ## Paid hints and puzzle continuation
 
-The game includes two free hints per Solo/Story puzzle, three extra hints via `hints-3`, and a ₦200 continuation via `continue-solo` after four mistakes. **Create and enable `hints-3` and `continue-solo` in the Lagos Life developer dashboard**; code cannot make an unlisted product purchasable. If the SDK reports `not_for_sale`, the game now displays a clearer availability message instead of implying the payment succeeded.
+The game includes three free hints per Solo/Story puzzle, three extra hints via `hints-3`, and a ₦200 continuation via `continue-solo` after four mistakes. **Create and enable `hints-3` and `continue-solo` in the Lagos Life developer dashboard**; code cannot make an unlisted product purchasable. If the SDK reports `not_for_sale`, the game now displays a clearer availability message instead of implying the payment succeeded.
