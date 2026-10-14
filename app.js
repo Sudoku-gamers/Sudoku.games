@@ -6993,7 +6993,7 @@
                 const requestedMode = gameState.gameMode === 'solveoff' ? 'solveoff' : 'simultaneous';
                 try {
                     const { session } = await V.session();
-                    const cfgResponse = await fetch('/api/vatar/solveoff/config', {
+                    const cfgResponse = await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/solveoff/config', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ session, matchId: match.id, config: {
                             mode: requestedMode, timeLimit: gameState.timeLimit,
@@ -7080,7 +7080,7 @@
             if (!matchId) return;
             try {
                 const { session } = await V.session();
-                await fetch('/api/vatar/move', {
+                await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/move', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ session, matchId, row, col, value })
                 });
@@ -7106,7 +7106,7 @@
                 if (!activeVatarMatch || activeVatarMatch.id !== matchId || vatarPaused) return;
                 try {
                     const { session } = await V.session();
-                    const response = await fetch('/api/vatar/moves', {
+                    const response = await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/moves', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
                         body: JSON.stringify({ session, matchId, after: vatarMoveSeq })
                     });
@@ -7142,7 +7142,7 @@
             if (!matchId) return;
             try {
                 const { session } = await V.session();
-                await fetch('/api/vatar/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session, matchId, type: 'solved' }) });
+                await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session, matchId, type: 'solved' }) });
             } catch (err) { console.warn('[Vatar] solve result relay failed:', err); }
         };
         window.sudokuSubmitVatarForfeit = async (reason = 'mistake_limit') => {
@@ -7150,7 +7150,7 @@
             if (!matchId || !vatarPlayer?.id) return { success: false, error: 'no_active_vatar_match' };
             try {
                 const { session } = await V.session();
-                const response = await fetch('/api/vatar/match/forfeit', {
+                const response = await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/match/forfeit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ session, matchId, defeatedPlayerId: vatarPlayer.id, reason })
@@ -7231,7 +7231,7 @@
             if (!challengeList) return;
             challengeList.innerHTML = '<div style="font-size:.8rem;color:var(--text-muted);">Checking for open challenges…</div>';
             try {
-                const response = await fetch('/api/vatar/challenges', { cache: 'no-store' });
+                const response = await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/challenges', { cache: 'no-store' });
                 if (!response.ok) throw new Error('challenge_list_unavailable');
                 const data = await response.json();
                 const challenges = Array.isArray(data.challenges) ? data.challenges : [];
@@ -7263,7 +7263,7 @@
                         join.disabled = true; join.textContent = 'Joining…';
                         try {
                             const { session } = await V.session();
-                            const response = await fetch(`/api/vatar/challenges/${encodeURIComponent(challenge.id)}/join`, {
+                            const response = await fetch(`https://sudoku-games-nhkl.onrender.com/api/vatar/challenges/${encodeURIComponent(challenge.id)}/join`, {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ session })
                             });
@@ -7311,7 +7311,7 @@
                 const match = await V.match.create({ stake: 0, seats: 2 });
                 if (!match?.id || !match?.code) throw new Error('match_creation_incomplete');
                 const { session } = await V.session();
-                const response = await fetch('/api/vatar/challenges', {
+                const response = await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/challenges', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ session, matchId: match.id, code: match.code, config: settings })
                 });
@@ -7404,7 +7404,7 @@
         const claimPurchase = async (purchase) => {
             if (!purchase?.purchaseId || !PRODUCTS.has(purchase.productId)) return;
             const { session } = await V.session();
-            const response = await fetch('/api/vatar/claim', {
+            const response = await fetch('https://sudoku-games-nhkl.onrender.com/api/vatar/claim', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ session, purchaseId: purchase.purchaseId })
             });
