@@ -1414,7 +1414,7 @@
             document.getElementById('hint-btn')?.addEventListener('click', function() {
                 if (!gameState.isRunning) return;
                 const N = gameState.gridSize || 9;
-                const maxHints = { easy: 5, medium: 3, hard: 1, extreme: 0 }[gameState.difficulty] ?? 3;
+                const maxHints = 2;
                 const usingBonusHint = gameState.hintsUsed >= maxHints;
                 if (usingBonusHint && (playerData.bonusHints || 0) <= 0) {
                     showToast(`No hints left (${maxHints} included on ${gameState.difficulty})`, 2200);
@@ -1498,7 +1498,7 @@
 
         function updateHintDisplay() {
             const N = gameState.gridSize || 9;
-            const maxHints = { easy: 5, medium: 3, hard: 1, extreme: 0 }[gameState.difficulty] ?? 3;
+            const maxHints = 2;
             const remaining = Math.max(0, maxHints - (gameState.hintsUsed || 0)) + Math.max(0, playerData.bonusHints || 0);
             const el = document.getElementById('hint-count');
             const btn = document.getElementById('hint-btn');
@@ -2114,6 +2114,7 @@
             gameState.animatingCells.clear();
             gameState.lastTick = Date.now();
             gameState.wrongMoves = 0;
+            gameState.maxWrongMoves = 4;
             gameState.hintsUsed  = 0;
             gameState.errorCell  = null;
             gameState.highlightNumber = null;
@@ -3071,55 +3072,39 @@
             const { row, col } = gameState.selectedCell;
             if (gameState.claims[row][col] !== 0) return;
 
-            // Wrong move handling
+            // Wrong move handling. Solo/story games end on the fourth mistake.
             if (gameState.solution[row][col] !== number) {
-                // Register wrong move
                 gameState.wrongMoves++;
                 gameState.totalWrongMoves++;
                 gameState.errorCell = { row, col, startTime: Date.now() };
-
-                // Penalty: lose 10 seconds of time (not applicable in untimed solo mode)
-                const PENALTY_SECONDS = 10;
-                if (gameState.gameMode === 'simultaneous' || gameState.gameMode === 'pvp') {
-                    gameState.timeRemaining = Math.max(0, gameState.timeRemaining - PENALTY_SECONDS);
-                    gameState.p1Time = gameState.timeRemaining;
-                    gameState.p2Time = gameState.timeRemaining;
-                } else if (gameState.gameMode === 'passplay') {
-                    const activeTimer = gameState.currentPlayer === 2 ? 'p2Time' : 'p1Time';
-                    gameState[activeTimer] = Math.max(0, gameState[activeTimer] - PENALTY_SECONDS);
+                playSound('error');
+                updateWrongMovesDisplay();
+                markGridDirty(); drawGrid();
+                if (gameState.gameMode === 'solo') {
+                    const remaining = Math.max(0, gameState.maxWrongMoves - gameState.wrongMoves);
+                    if (remaining > 0) showToast(`Incorrect entry — ${remaining} mistake${remaining === 1 ? '' : 's'} remaining`, 1800);
+                    if (gameState.wrongMoves >= gameState.maxWrongMoves) {
+                        window._sudokuPendingContinue = true;
+                        endGame(2, 'mistake_limit');
+                    }
                 } else if (gameState.gameMode === 'solveoff') {
                     showToast('Incorrect number — try again. Your clock keeps running.', 1800);
+                } else {
+                    const PENALTY_SECONDS = 10;
+                    if (gameState.gameMode === 'simultaneous' || gameState.gameMode === 'pvp') {
+                        gameState.timeRemaining = Math.max(0, gameState.timeRemaining - PENALTY_SECONDS);
+                        gameState.p1Time = gameState.timeRemaining;
+                        gameState.p2Time = gameState.timeRemaining;
+                    } else if (gameState.gameMode === 'passplay') {
+                        const activeTimer = gameState.currentPlayer === 2 ? 'p2Time' : 'p1Time';
+                        gameState[activeTimer] = Math.max(0, gameState[activeTimer] - PENALTY_SECONDS);
+                    }
+                    showPenaltyToast(PENALTY_SECONDS);
                 }
-                // solo mode is untimed (dojoElapsed counts up) — no time penalty applied
-
-                // Show time penalties only for modes that use them. Solve-Off entries are simply rejected.
-                if (gameState.gameMode !== 'solveoff') showPenaltyToast(PENALTY_SECONDS);
-
-                // Play error sound
-                playSound('error');
-
-                // 3 wrong moves → deduct 500 points (if any) and show warning
-                if (gameState.gameMode !== 'solveoff' && gameState.wrongMoves >= gameState.maxWrongMoves) {
-                    const deduct = 500;
-                    gameState.scores.p1 = Math.max(0, gameState.scores.p1 - deduct);
-                    _lastCorrectMoveTime = 0; // reset speed bonus as punishment
-                    updateScores();
-                    spawnFloatingScore(row, col, '-500', '#f05a5a');
-                    gameState.wrongMoves = 0; // reset counter after penalty
-                }
-
-                updateWrongMovesDisplay();
-                markGridDirty();
-                drawGrid();
-                // Auto-clear error flash after 600ms
-                setTimeout(() => {
-                    gameState.errorCell = null;
-                    markGridDirty();
-                    drawGrid();
-                }, 600);
+                setTimeout(() => { gameState.errorCell = null; markGridDirty(); drawGrid(); }, 600);
                 return;
             }
-            
+
             const player = gameState.gameMode === 'passplay' ? gameState.currentPlayer : (gameState.gameMode === 'pvp' ? (gameState.vatarSlot || 1) : 1);
             
             // ── Speed-based scoring (mirrors reference app) ──────────────
@@ -3481,8 +3466,10 @@
 
                 const isDaily = gameState.isDailyChallenge;
                 icon.textContent  = solved ? (isDaily ? '📅' : (gameState.storyModeActive ? '🗺️' : '🎉')) : '🤔';
-                title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : (gameState.storyModeActive ? `Story Level ${gameState.storyLevel} Complete!` : 'Puzzle Complete!')) : 'Keep Going!';
-                subtitle.textContent = solved ? `Solved in ${timeStr}` : `Time elapsed: ${timeStr}`;
+                title.textContent = solved ? (isDaily ? 'Daily Challenge Complete!' : (gameState.storyModeActive ? `Story Level ${gameState.storyLevel} Complete!` : 'Puzzle Complete!')) : (reason === 'mistake_limit' ? 'Four mistakes — puzzle over' : 'Keep Going!');
+                subtitle.textContent = solved ? `Solved in ${timeStr}` : (reason === 'mistake_limit' ? 'Continue this puzzle for ₦100, or start again.' : `Time elapsed: ${timeStr}`);
+                const continueBtn = document.getElementById('continue-solo-btn');
+                if (continueBtn) continueBtn.style.display = (!solved && reason === 'mistake_limit' && window.Vatar && window._sudokuPendingContinue) ? 'block' : 'none';
 
                 // Best time tracking
                 const diff = gameState.difficulty || 'medium';
@@ -3513,7 +3500,7 @@
                 }
 
                 // Build compact 2-column stats grid
-                const maxHints = { easy: 5, medium: 3, hard: 1, extreme: 0 }[diff] ?? 3;
+                const maxHints = 2;
                 const finalScore = gameState.scores.p1;
                 grid.style.display = 'grid';
                 grid.style.gridTemplateColumns = '1fr 1fr';
@@ -7215,9 +7202,17 @@
 
         // Purchases are only delivered after server-side verification. The server endpoint
         // is included in server/ and must be deployed/configured before products go on sale.
-        const PRODUCTS = new Set(['hints-5', 'hints-20', 'theme-gold']);
+        const PRODUCTS = new Set(['hints-5', 'hints-20', 'theme-gold', 'continue-solo']);
         const applyVerifiedPurchase = (productId) => {
-            if (productId === 'hints-5') {
+            if (productId === 'continue-solo') {
+                if (!window._sudokuPendingContinue || gameState.gameMode !== 'solo') { showToast('Continue is only available immediately after a solo/story loss.', 2500); return; }
+                window._sudokuPendingContinue = false;
+                const continueBtn = document.getElementById('continue-solo-btn'); if (continueBtn) continueBtn.style.display = 'none';
+                gameState.wrongMoves = 0; gameState.maxWrongMoves = 4; gameState.isRunning = true; gameState.isPaused = false; gameState.lastTick = Date.now();
+                document.getElementById('result-modal')?.classList.remove('active');
+                updateWrongMovesDisplay(); markGridDirty(); drawGrid(); saveOngoingGame();
+                showToast('Puzzle continued. Mistake counter reset.', 2500);
+            } else if (productId === 'hints-5') {
                 playerData.bonusHints = (playerData.bonusHints || 0) + 5; savePlayerData(); updateHintDisplay(); showToast('+5 bonus hints added!', 2500);
             } else if (productId === 'hints-20') {
                 playerData.bonusHints = (playerData.bonusHints || 0) + 20; savePlayerData(); updateHintDisplay(); showToast('+20 bonus hints added!', 2500);
@@ -7238,6 +7233,7 @@
         };
         window.vatarBuy = async (productId) => {
             if (!PRODUCTS.has(productId)) return;
+            if (productId === 'continue-solo' && (!window._sudokuPendingContinue || gameState.gameMode !== 'solo')) { showToast('Continue is only available after a solo/story loss.', 2500); return; }
             try { await V.purchase(productId); }
             catch (err) { vatarError(err); return; }
             try {

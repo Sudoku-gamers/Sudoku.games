@@ -798,12 +798,12 @@ create policy "public rw" on sudoku_rooms
                 <button class="tool-btn" id="pencil-mode-btn" title="Pencil">✎</button>
                 <button class="tool-btn" id="erase-btn" title="Erase">⌫</button>
                 <div class="errors-badge">
-                    <span id="wrong-moves-display" title="Wrong moves — 3 = lose a point">○○○</span>
+                    <span id="wrong-moves-display" title="Mistakes — four incorrect entries end solo/story games">○○○○</span>
                 </div>
-                <button class="tool-btn tool-btn-hint" id="hint-btn" title="Hint (reveals one safe cell)">💡<span class="hint-count" id="hint-count">3</span></button>
+                <button class="tool-btn tool-btn-hint" id="hint-btn" title="Hint (reveals one safe cell)">💡<span class="hint-count" id="hint-count">2</span></button>
                 <!-- Vatar: buy hints button — hidden until Vatar SDK is active -->
                 <button class="tool-btn" id="vatar-buy-hints-btn"
-                        title="Buy 5 more hints"
+                        title="Buy 5 more hints for ₦100" aria-label="Buy five additional hints for 100 naira"
                         style="display:none;font-size:0.75rem;padding:4px 8px;"
                         onclick="window.vatarBuy && window.vatarBuy('hints-5')">+💡</button>
                 <button class="tool-btn" id="vatar-buy-theme-btn" title="Unlock Gold theme" style="display:none;font-size:0.75rem;padding:4px 8px;" onclick="window.vatarBuy && window.vatarBuy('theme-gold')">✨</button>
@@ -925,6 +925,7 @@ create policy "public rw" on sudoku_rooms
             </div>
             <div class="modal-footer">
                 <button class="action-btn btn-primary" id="play-again-btn">Play Again</button>
+                <button class="action-btn btn-online" id="continue-solo-btn" style="display:none;" onclick="window.vatarBuy && window.vatarBuy('continue-solo')">Continue this puzzle · ₦100</button>
                 <button class="action-btn btn-share" id="share-result-btn">📤 Share Result</button>
                 <button class="action-btn btn-secondary" id="back-to-lobby-btn">Back to Lobby</button>
             </div>
