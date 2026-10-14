@@ -102,22 +102,31 @@ async function vatarApi(route, body) {
 async function submitMatchResult(matchId, matchNonce, winnerPlayerIdOrDraw) {
   if (!SECRET || !RESULTS_SECRET) return { http: 503, error: 'results_not_configured' };
   const ts = String(Math.floor(Date.now() / 1000));
-  const pathStr = `/api/games/v1/matches/${matchId}/result`;
+  const pathStr = `/api/games/v1/matches/${encodeURIComponent(matchId)}/result`;
   const body = JSON.stringify({ winner: winnerPlayerIdOrDraw });
   const sha = crypto.createHash('sha256').update(body).digest('hex');
   const sig = 'v1=' + crypto.createHmac('sha256', RESULTS_SECRET)
     .update(['POST', pathStr, ts, matchNonce, sha].join('\n')).digest('hex');
 
-  const response = await fetch('https://lagoslife.app' + pathStr, {
-    method: 'POST',
-    body,
-    headers: {
-      Authorization: `Bearer ${SECRET}`,
-      'Content-Type': 'application/json',
-      'X-Vatar-Timestamp': ts,
-      'X-Vatar-Signature': sig
-    }
-  });
+  let response;
+  try {
+    response = await fetch('https://lagoslife.app' + pathStr, {
+      method: 'POST',
+      body,
+      headers: {
+        Authorization: `Bearer ${SECRET}`,
+        'Content-Type': 'application/json',
+        'X-Vatar-Timestamp': ts,
+        'X-Vatar-Signature': sig
+      },
+      signal: AbortSignal.timeout(12000)
+    });
+  } catch (err) {
+    console.error('[Vatar] signed result request failed before receiving an HTTP response:', {
+      name: err?.name || null, error: err?.message || 'network_error'
+    });
+    return { http: 0, error: 'result_request_network_error' };
+  }
   let data = {};
   try { data = await response.json(); } catch {}
   return { http: response.status, ...data };
@@ -164,32 +173,57 @@ const server = http.createServer(async (req, res) => {
     
     // Endpoint to handle match completion / mistake limit forfeiture
     if (url.pathname === '/api/vatar/match/forfeit' && req.method === 'POST') {
+      console.log('[Vatar] forfeit route reached');
       const payload = await readBody(req);
       const { session, matchId, defeatedPlayerId } = payload;
       if (typeof session !== 'string' || typeof matchId !== 'string' || typeof defeatedPlayerId !== 'string') {
+        console.warn('[Vatar] forfeit rejected before verification: invalid_request');
         return send(res, 400, { error: 'invalid_request' });
       }
+
       const player = await verifiedPlayer(session);
-      if (!player) return send(res, 403, { error: 'invalid_session' });
+      if (!player) {
+        console.warn('[Vatar] forfeit rejected: invalid_session');
+        return send(res, 403, { error: 'invalid_session' });
+      }
+
       const match = await verifiedMatch(matchId);
-      if (!match || match.status !== 'playing' || !Array.isArray(match.players) || match.players.length !== 2 || !match.players.some(p => p.playerId === player.playerId)) {
+      // Accept both API field spellings while still comparing only server-verified IDs.
+      const playerIdOf = (item) => item?.playerId ?? item?.id ?? null;
+      const players = Array.isArray(match?.players) ? match.players : [];
+      const callerIsInMatch = players.some(item => playerIdOf(item) === player.playerId);
+      if (!match || match.status !== 'playing' || players.length !== 2 || !callerIsInMatch) {
+        console.warn('[Vatar] forfeit rejected: not_active_two_player_match', {
+          matchFound: Boolean(match), matchStatus: match?.status ?? null,
+          playerCount: players.length, callerIsInMatch
+        });
         return send(res, 403, { error: 'not_active_two_player_match' });
       }
+
       // Never trust a client-supplied defeated ID unless it is the verified caller.
       if (player.playerId !== defeatedPlayerId) {
+        console.warn('[Vatar] forfeit rejected: caller_id_mismatch');
         return send(res, 403, { error: 'cannot_forfeit_for_another_player' });
       }
-      if (!match.nonce || match.players.filter(p => p.playerId === defeatedPlayerId).length !== 1) {
+      if (!match.nonce || players.filter(item => playerIdOf(item) === defeatedPlayerId).length !== 1) {
+        console.warn('[Vatar] forfeit rejected: match_result_not_verifiable', {
+          hasNonce: Boolean(match.nonce), defeatedPlayerCount: players.filter(item => playerIdOf(item) === defeatedPlayerId).length
+        });
         return send(res, 409, { error: 'match_result_not_verifiable' });
       }
 
       // The verified opposing participant is the winner.
-      const opposingPlayer = match.players.find(p => p.playerId !== player.playerId);
-      if (!opposingPlayer?.playerId) return send(res, 409, { error: 'opponent_not_found' });
-      const winnerId = opposingPlayer.playerId;
+      const opposingPlayer = players.find(item => playerIdOf(item) !== player.playerId);
+      const winnerId = playerIdOf(opposingPlayer);
+      if (!winnerId) {
+        console.warn('[Vatar] forfeit rejected: opponent_not_found');
+        return send(res, 409, { error: 'opponent_not_found' });
+      }
 
       const result = await submitMatchResult(matchId, match.nonce, winnerId);
-      if (result.http !== 200 && result.http !== 201 && result.http !== 204 && !result.success) {
+      const accepted = [200, 201, 204].includes(result.http) ||
+        (result.http >= 200 && result.http < 300 && result.success === true);
+      if (!accepted) {
         console.error('[Vatar] signed result submission rejected:', { http: result.http, error: result.error || null });
         return send(res, 502, { error: 'result_upload_failed', details: result });
       }
