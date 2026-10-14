@@ -56,6 +56,73 @@ html[data-appearance="dark"] .daily-paper-sheet{background:#24231f;color:#eee8d8
 html[data-appearance="dark"] .daily-paper-sheet .daily-paper-actions button{background:#d9b875;color:#171714;border-color:#d9b875}
 html[data-appearance="dark"] .daily-paper-sheet .daily-paper-actions button.secondary{background:transparent;color:#eee8d8;border-color:#b9b09d}
 #daily-newspaper-modal[hidden]{display:none!important}#daily-newspaper-modal{position:fixed;inset:0;z-index:10050;background:rgba(18,16,12,.78);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}.daily-paper-sheet{width:min(720px,100%);max-height:92vh;overflow:auto;background:#f3e8ce;color:#282319;border:1px solid #b8a47b;box-shadow:0 18px 60px #0008;padding:clamp(20px,5vw,42px);font-family:Georgia,serif}.daily-paper-masthead{text-align:center;font-weight:900;font-size:clamp(28px,6vw,48px);letter-spacing:.04em;border-bottom:4px double #282319;padding-bottom:10px}.daily-paper-kicker{text-transform:uppercase;letter-spacing:.13em;font:700 12px Arial,sans-serif;margin-top:22px}.daily-paper-sheet h2{font-size:clamp(26px,5vw,42px);line-height:1.08;margin:12px 0}.daily-paper-sheet p{line-height:1.6}.daily-paper-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.daily-paper-actions button{padding:12px 16px;border:1px solid #282319;background:#282319;color:#f3e8ce;cursor:pointer}.daily-paper-actions button.secondary{background:transparent;color:#282319}
+
+/* Accessibility-focused Ink & Parchment system: restrained luminance, strong text contrast. */
+html[data-appearance="dark"]{
+  --sl-bg:#191916;--sl-panel:#26251f;--sl-panel2:#333128;--sl-text:#f0e8d6;--sl-muted:#c4bba7;
+  --sl-border:#625a48;--sl-accent:#dfc184;--sl-control:#302e27;--sl-focus:#f0d08a;
+  color-scheme:dark;
+}
+html[data-appearance="light"]{
+  /* A softer parchment, not a bright white canvas. */
+  --sl-bg:#e7ddc6;--sl-panel:#f0e6d0;--sl-panel2:#e1d4b7;--sl-text:#29241c;--sl-muted:#5e5547;
+  --sl-border:#b6a582;--sl-accent:#75501e;--sl-control:#e8dcc1;--sl-focus:#674315;
+  color-scheme:light;
+}
+html[data-appearance] body,html[data-appearance] #app,html[data-appearance] main,
+html[data-appearance] .page,html[data-appearance] .page-content,html[data-appearance] .page-shell,
+html[data-appearance] .page-container,html[data-appearance] .settings-page,html[data-appearance] .lobby-page,
+html[data-appearance] .profile-page,html[data-appearance] .history-page,html[data-appearance] .friends-page,
+html[data-appearance] .game-page,html[data-appearance] #splash-screen{
+  background-color:var(--sl-bg)!important;color:var(--sl-text)!important;
+}
+html[data-appearance] .card,html[data-appearance] .panel,html[data-appearance] .settings-card,
+html[data-appearance] .setting-row,html[data-appearance] .leaderboard-item,html[data-appearance] .profile-stat,
+html[data-appearance] .friend-card,html[data-appearance] .history-item,html[data-appearance] .challenge-card,
+html[data-appearance] .modal-content,html[data-appearance] .side-menu,html[data-appearance] #settings-page,
+html[data-appearance] #leaderboard-page,html[data-appearance] #profile-page,html[data-appearance] #history-page{
+  background-color:var(--sl-panel)!important;color:var(--sl-text)!important;border-color:var(--sl-border)!important;
+}
+html[data-appearance] h1,html[data-appearance] h2,html[data-appearance] h3,html[data-appearance] h4,
+html[data-appearance] p,html[data-appearance] label,html[data-appearance] .setting-label,
+html[data-appearance] .section-label,html[data-appearance] .setting-info,
+html[data-appearance] .setting-row *,html[data-appearance] .card *{text-shadow:none;}
+html[data-appearance] .setting-label,html[data-appearance] .setting-row .setting-label,
+html[data-appearance] .settings-card .setting-label{color:var(--sl-text)!important;font-weight:650;}
+html[data-appearance] .setting-desc,html[data-appearance] .muted,html[data-appearance] .text-muted,
+html[data-appearance] small,html[data-appearance] .subtitle,html[data-appearance] .description{
+  color:var(--sl-muted)!important;
+}
+html[data-appearance] button,html[data-appearance] select,html[data-appearance] input,html[data-appearance] textarea{
+  color:var(--sl-text);border-color:var(--sl-border);font:inherit;
+}
+html[data-appearance] select,html[data-appearance] input:not([type="checkbox"]):not([type="radio"]),
+html[data-appearance] textarea{background-color:var(--sl-control)!important;color:var(--sl-text)!important;}
+html[data-appearance] select option{background:var(--sl-panel);color:var(--sl-text);}
+html[data-appearance] .action-btn,html[data-appearance] .btn-secondary,
+html[data-appearance] .leaderboard-tab,html[data-appearance] .side-menu-item{
+  background-color:var(--sl-panel2)!important;color:var(--sl-text)!important;border-color:var(--sl-border)!important;
+}
+html[data-appearance] button:focus-visible,html[data-appearance] select:focus-visible,
+html[data-appearance] input:focus-visible,html[data-appearance] textarea:focus-visible,
+html[data-appearance] a:focus-visible,[tabindex]:focus-visible{
+  outline:3px solid var(--sl-focus)!important;outline-offset:3px;
+}
+html[data-appearance] :disabled,html[data-appearance] [aria-disabled="true"]{opacity:.78;cursor:not-allowed;}
+html[data-appearance="dark"] [style*="background:#fff"],html[data-appearance="dark"] [style*="background: #fff"],
+html[data-appearance="dark"] [style*="background-color: white"],html[data-appearance="dark"] [style*="background-color:#fff"],
+html[data-appearance="dark"] [style*="background: white"],html[data-appearance="dark"] [style*="background-color: rgb(255"]{
+  background-color:var(--sl-panel)!important;color:var(--sl-text)!important;
+}
+html[data-appearance="light"] [style*="color: white"],html[data-appearance="light"] [style*="color:#fff"],
+html[data-appearance="light"] [style*="color: #fff"]{color:var(--sl-text)!important;}
+html[data-appearance="dark"] .daily-paper-sheet{background:#26251f;color:#f0e8d6;border-color:#625a48;}
+html[data-appearance="light"] .daily-paper-sheet{background:#f0e6d0;color:#29241c;border-color:#b6a582;}
+html[data-appearance] .daily-paper-sheet .daily-paper-actions button{background:var(--sl-text);color:var(--sl-bg);border-color:var(--sl-text);}
+html[data-appearance] .daily-paper-sheet .daily-paper-actions button.secondary{background:transparent;color:var(--sl-text);border-color:var(--sl-border);}
+/* Reduce motion for people who are sensitive to movement or visual effects. */
+@media (prefers-reduced-motion: reduce){html:focus-within{scroll-behavior:auto!important}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
 </style>
 
 </head>
