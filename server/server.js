@@ -4,9 +4,10 @@
  *
  * Required environment:
  *   VATAR_SECRET=vtr_test_... (sandbox) or vtr_live_... (approved production)
+ *   VATAR_RESULTS_SECRET=... (results signing secret)
  *   PORT=8080 (optional)
  *
- * Keep VATAR_SECRET out of all browser files. Do not enable staked matches until
+ * Keep VATAR_SECRET and VATAR_RESULTS_SECRET out of all browser files. Do not enable staked matches until
  * an authoritative Sudoku generator/move validator and signed result submission
  * have been deployed; this starter intentionally supports zero-stake friendlies only.
  */
@@ -28,6 +29,7 @@ try {
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API = 'https://lagoslife.app/api/games/v1';
 const SECRET = process.env.VATAR_SECRET;
+const RESULTS_SECRET = process.env.VATAR_RESULTS_SECRET;
 const PORT = Number(process.env.PORT || 8080);
 const DB_PATH = process.env.VATAR_STORE_PATH || path.join(path.dirname(fileURLToPath(import.meta.url)), 'vatar-store.json');
 // Least-privilege allowlist: only products enabled for this build.
@@ -41,6 +43,7 @@ const publicChallenges = new Map();
 const MAX_BODY = 64 * 1024;
 
 if (!SECRET) console.warn('[Vatar] VATAR_SECRET is not set. Purchase verification will return 503.');
+if (!RESULTS_SECRET) console.warn('[Vatar] VATAR_RESULTS_SECRET is not set. Match result submission will fail.');
 
 async function readStore() {
   try { return JSON.parse(await fs.readFile(DB_PATH, 'utf8')); }
@@ -94,6 +97,32 @@ async function vatarApi(route, body) {
   try { data = await response.json(); } catch {}
   return { http: response.status, ...data };
 }
+
+// Signed match result submitter matching Vatar's API requirement
+async function submitMatchResult(matchId, matchNonce, winnerPlayerIdOrDraw) {
+  if (!SECRET || !RESULTS_SECRET) return { http: 503, error: 'results_not_configured' };
+  const ts = String(Math.floor(Date.now() / 1000));
+  const pathStr = `/api/games/v1/matches/${matchId}/result`;
+  const body = JSON.stringify({ winner: winnerPlayerIdOrDraw });
+  const sha = crypto.createHash('sha256').update(body).digest('hex');
+  const sig = 'v1=' + crypto.createHmac('sha256', RESULTS_SECRET)
+    .update(['POST', pathStr, ts, matchNonce, sha].join('\n')).digest('hex');
+
+  const response = await fetch('https://lagoslife.app' + pathStr, {
+    method: 'POST',
+    body,
+    headers: {
+      Authorization: `Bearer ${SECRET}`,
+      'Content-Type': 'application/json',
+      'X-Vatar-Timestamp': ts,
+      'X-Vatar-Signature': sig
+    }
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  return { http: response.status, ...data };
+}
+
 function send(res, status, data, extraHeaders = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extraHeaders });
   res.end(JSON.stringify(data));
@@ -106,6 +135,32 @@ function mime(file) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    
+    // Endpoint to handle match completion / mistake limit forfeiture
+    if (url.pathname === '/api/vatar/match/forfeit' && req.method === 'POST') {
+      const payload = await readBody(req);
+      const { session, matchId, defeatedPlayerId } = payload;
+      if (typeof session !== 'string' || typeof matchId !== 'string' || typeof defeatedPlayerId !== 'string') {
+        return send(res, 400, { error: 'invalid_request' });
+      }
+      const player = await verifiedPlayer(session);
+      if (!player) return send(res, 403, { error: 'invalid_session' });
+      const match = await verifiedMatch(matchId);
+      if (!match || match.status !== 'playing' || !Array.isArray(match.players) || !match.players.some(p => p.playerId === player.playerId)) {
+        return send(res, 403, { error: 'not_active_match_member' });
+      }
+      
+      // Determine winner (the other participant in the match)
+      const opposingPlayer = match.players.find(p => p.playerId !== defeatedPlayerId);
+      const winnerId = opposingPlayer ? opposingPlayer.playerId : match.players[0].playerId;
+
+      const result = await submitMatchResult(matchId, match.nonce, winnerId);
+      if (result.http !== 200 && result.http !== 201 && result.http !== 204 && !result.success) {
+        return send(res, 502, { error: 'result_upload_failed', details: result });
+      }
+      return send(res, 200, { success: true, winner: winnerId });
+    }
+
     if (url.pathname === '/api/daily-news' && req.method === 'GET') {
       // Try multiple public feeds, then select an item published on the previous
       // local calendar day. RSS is not a guaranteed API, so fail clearly if all fail.
