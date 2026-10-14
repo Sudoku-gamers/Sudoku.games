@@ -146,13 +146,21 @@ const server = http.createServer(async (req, res) => {
       const player = await verifiedPlayer(session);
       if (!player) return send(res, 403, { error: 'invalid_session' });
       const match = await verifiedMatch(matchId);
-      if (!match || match.status !== 'playing' || !Array.isArray(match.players) || !match.players.some(p => p.playerId === player.playerId)) {
-        return send(res, 403, { error: 'not_active_match_member' });
+      if (!match || match.status !== 'playing' || !Array.isArray(match.players) || match.players.length !== 2 || !match.players.some(p => p.playerId === player.playerId)) {
+        return send(res, 403, { error: 'not_active_two_player_match' });
       }
-      
-      // Determine winner (the other participant in the match)
-      const opposingPlayer = match.players.find(p => p.playerId !== defeatedPlayerId);
-      const winnerId = opposingPlayer ? opposingPlayer.playerId : match.players[0].playerId;
+      // Never trust a client-supplied defeated ID unless it is the verified caller.
+      if (player.playerId !== defeatedPlayerId) {
+        return send(res, 403, { error: 'cannot_forfeit_for_another_player' });
+      }
+      if (!match.nonce || match.players.filter(p => p.playerId === defeatedPlayerId).length !== 1) {
+        return send(res, 409, { error: 'match_result_not_verifiable' });
+      }
+
+      // The verified opposing participant is the winner.
+      const opposingPlayer = match.players.find(p => p.playerId !== player.playerId);
+      if (!opposingPlayer?.playerId) return send(res, 409, { error: 'opponent_not_found' });
+      const winnerId = opposingPlayer.playerId;
 
       const result = await submitMatchResult(matchId, match.nonce, winnerId);
       if (result.http !== 200 && result.http !== 201 && result.http !== 204 && !result.success) {
