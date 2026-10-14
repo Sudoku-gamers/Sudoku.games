@@ -31,7 +31,7 @@ const SECRET = process.env.VATAR_SECRET;
 const PORT = Number(process.env.PORT || 8080);
 const DB_PATH = process.env.VATAR_STORE_PATH || path.join(path.dirname(fileURLToPath(import.meta.url)), 'vatar-store.json');
 // Least-privilege allowlist: only products enabled for this build.
-const PRODUCTS = new Set(['hints-5', 'continue-solo']);
+const PRODUCTS = new Set(['hints-3', 'continue-solo']);
 const liveMoves = new Map();
 const sessionCache = new Map();
 const matchCache = new Map();
