@@ -7923,5 +7923,48 @@
         });
 
     })();
+// Local multiplayer state representation
+let matchState = {
+    id: activeMatchId,
+    nonce: activeMatchNonce,
+    players: {
+        'player_local': { mistakes: 0 },
+        'bot_test': { mistakes: 0 }
+    },
+    maxMistakes: 5
+};
 
+function recordPlayerMistake(playerId) {
+    if (!matchState.players[playerId]) return;
+
+    matchState.players[playerId].mistakes += 1;
+    console.log(`Mistake recorded for ${playerId}: ${matchState.players[playerId].mistakes}/5`);
+
+    // Check if the 5-mistake limit has been reached
+    if (matchState.players[playerId].mistakes >= matchState.maxMistakes) {
+        handleElimination(playerId);
+    }
+}
+
+async function handleElimination(defeatedId) {
+    console.log(`Player ${defeatedId} reached 5 mistakes and loses on the spot.`);
+
+    // Find the opposing player/bot as the winner
+    const winnerId = Object.keys(matchState.players).find(id => id !== defeatedId);
+
+    // Conclude the match and upload results via the signed backend route
+    try {
+        const res = await fetch('/api/match/end-game', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ match: matchState, winner: winnerId })
+        });
+        const data = await res.json();
+        
+        // Trigger UI game over screen
+        showGameOverDisplay(winnerId, 'Exceeded 5-mistake limit');
+    } catch (err) {
+        console.error('Failed to submit elimination result:', err);
+    }
+}
 
